@@ -1,0 +1,714 @@
+#!/usr/bin/env python3
+"""Generates every shared asset for the AH: Hell Aisle bake-off.
+
+Deterministic: same seed in, same PNGs out. Run from the repo root:
+
+    python3 tools/gen_assets.py
+
+Writes to assets/. See assets/MANIFEST.md for the resulting contract.
+"""
+
+import random
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+OUT = Path(__file__).resolve().parent.parent / "assets"
+SEED = 20260713
+
+# Albert Heijn house palette, plus the grime.
+AH_BLUE = (0, 160, 226)
+AH_DARK = (0, 106, 158)
+AH_LIGHT = (170, 224, 247)
+WHITE = (245, 245, 245)
+OFFWHITE = (222, 222, 216)
+GREY = (128, 128, 132)
+DARKGREY = (64, 64, 68)
+NEARBLACK = (24, 24, 28)
+STEEL = (166, 170, 178)
+BLOOD = (150, 20, 24)
+RED = (208, 40, 40)
+GREEN = (60, 170, 70)
+YELLOW = (240, 200, 60)
+FLESH = (198, 178, 150)
+ROT = (140, 160, 120)
+BROWN = (120, 84, 52)
+NONE = (0, 0, 0, 0)
+
+TILE = 64  # wall / floor / ceiling texture size
+ENEMY = 64  # one enemy frame
+PICKUP = 32
+WEAPON_W, WEAPON_H = 192, 144
+FACE_W, FACE_H = 48, 56
+
+
+def new(w, h, color=NONE):
+    return Image.new("RGBA", (w, h), color)
+
+
+def save(img, name):
+    img.save(OUT / name)
+    print(f"  {name}  {img.width}x{img.height}")
+
+
+def strip(frames):
+    """Lay frames out left-to-right into one horizontal sheet."""
+    w, h = frames[0].size
+    sheet = new(w * len(frames), h)
+    for i, f in enumerate(frames):
+        sheet.paste(f, (i * w, 0), f)
+    return sheet
+
+
+def noise(img, amount=10, alpha_only_where_opaque=True):
+    """Per-pixel grain so the flat fills read as texture, not vector art."""
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            if alpha_only_where_opaque and a == 0:
+                continue
+            n = random.randint(-amount, amount)
+            px[x, y] = (
+                max(0, min(255, r + n)),
+                max(0, min(255, g + n)),
+                max(0, min(255, b + n)),
+                a,
+            )
+    return img
+
+
+def shade(color, factor):
+    return tuple(max(0, min(255, int(c * factor))) for c in color[:3])
+
+
+# --------------------------------------------------------------------------
+# Walls, floor, ceiling
+# --------------------------------------------------------------------------
+
+PRODUCT_COLORS = [
+    (200, 60, 50), (240, 180, 40), (60, 130, 200), (80, 170, 90),
+    (230, 120, 40), (170, 80, 170), (220, 220, 210), (110, 70, 50),
+]
+
+
+def wall_shelf(stocked=True):
+    """Supermarket gondola shelving, seen head-on. The workhorse wall."""
+    img = new(TILE, TILE, (196, 198, 200, 255))
+    d = ImageDraw.Draw(img)
+    # Back panel
+    d.rectangle([0, 0, TILE - 1, TILE - 1], fill=(178, 180, 184, 255))
+    shelf_ys = [4, 20, 36, 52]
+    for sy in shelf_ys:
+        if stocked:
+            # Row of products standing on the shelf.
+            x = 2
+            while x < TILE - 4:
+                w = random.choice([5, 6, 7])
+                h = random.choice([9, 11, 12])
+                c = random.choice(PRODUCT_COLORS)
+                top = sy + 13 - h
+                d.rectangle([x, top, x + w - 1, sy + 12], fill=c + (255,))
+                # label band
+                d.rectangle([x, top + h // 3, x + w - 1, top + h // 3 + 1],
+                            fill=shade(c, 0.6) + (255,))
+                x += w + 1
+        # The steel shelf lip
+        d.rectangle([0, sy + 13, TILE - 1, sy + 14], fill=STEEL + (255,))
+        d.rectangle([0, sy + 15, TILE - 1, sy + 15], fill=DARKGREY + (255,))
+        # Price rail
+        d.rectangle([0, sy + 13, TILE - 1, sy + 13], fill=YELLOW + (255,))
+    return noise(img, 6)
+
+
+def wall_freezer():
+    """Glass freezer doors, frosted, lit from within. Used in the cold aisle."""
+    img = new(TILE, TILE, (200, 228, 240, 255))
+    d = ImageDraw.Draw(img)
+    for i, x in enumerate([0, 32]):
+        d.rectangle([x, 0, x + 31, TILE - 1], fill=(150, 200, 222, 255))
+        d.rectangle([x + 3, 3, x + 28, TILE - 4], fill=(190, 226, 240, 255))
+        # frost blooms
+        for _ in range(28):
+            fx = random.randint(x + 4, x + 27)
+            fy = random.randint(4, TILE - 5)
+            r = random.randint(1, 3)
+            d.ellipse([fx - r, fy - r, fx + r, fy + r], fill=(230, 245, 252, 255))
+        # handle
+        d.rectangle([x + 26, 22, x + 27, 42], fill=STEEL + (255,))
+        # frame
+        d.rectangle([x, 0, x + 31, TILE - 1], outline=(230, 232, 235, 255), width=2)
+    return noise(img, 5)
+
+
+def wall_plain():
+    """Painted store wall with the AH blue band. Perimeter of the shop."""
+    img = new(TILE, TILE, WHITE + (255,))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 24, TILE - 1, 39], fill=AH_BLUE + (255,))
+    d.rectangle([0, 22, TILE - 1, 23], fill=AH_LIGHT + (255,))
+    d.rectangle([0, 40, TILE - 1, 41], fill=AH_DARK + (255,))
+    # scuffs along the skirting
+    for _ in range(20):
+        x = random.randint(0, TILE - 3)
+        y = random.randint(52, TILE - 2)
+        d.rectangle([x, y, x + random.randint(1, 3), y + 1],
+                    fill=(190, 190, 190, 255))
+    return noise(img, 5)
+
+
+def wall_checkout():
+    """The checkout lane, seen as a wall segment: belt, register, divider."""
+    img = new(TILE, TILE, (206, 208, 210, 255))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, TILE - 1, 27], fill=(228, 230, 232, 255))  # backboard
+    d.rectangle([0, 28, TILE - 1, 43], fill=NEARBLACK + (255,))    # belt
+    for x in range(0, TILE, 8):  # belt segments
+        d.rectangle([x, 28, x, 43], fill=(58, 58, 62, 255))
+    d.rectangle([0, 44, TILE - 1, TILE - 1], fill=(150, 152, 156, 255))
+    # register
+    d.rectangle([40, 6, 58, 27], fill=(80, 82, 88, 255))
+    d.rectangle([42, 9, 56, 19], fill=(120, 220, 140, 255))  # screen
+    # AH logo tile
+    d.rectangle([4, 6, 20, 22], fill=AH_BLUE + (255,))
+    d.rectangle([9, 9, 11, 19], fill=WHITE + (255,))
+    d.rectangle([13, 9, 15, 19], fill=WHITE + (255,))
+    d.rectangle([9, 13, 15, 15], fill=WHITE + (255,))
+    return noise(img, 5)
+
+
+def wall_magazijn():
+    """Corrugated steel: the stockroom / back-of-house."""
+    img = new(TILE, TILE, (132, 136, 142, 255))
+    d = ImageDraw.Draw(img)
+    for x in range(0, TILE, 6):
+        d.rectangle([x, 0, x + 2, TILE - 1], fill=(154, 158, 164, 255))
+        d.rectangle([x + 3, 0, x + 3, TILE - 1], fill=(104, 108, 114, 255))
+    # rust bleeding from the bottom
+    for _ in range(24):
+        rx = random.randint(0, TILE - 1)
+        ry = random.randint(46, TILE - 1)
+        d.rectangle([rx, ry, rx + 1, min(TILE - 1, ry + random.randint(1, 6))],
+                    fill=(122, 78, 48, 255))
+    return noise(img, 7)
+
+
+def door_keycard():
+    """Locked stockroom door. Red reader = you need the bedrijfsleider's pass."""
+    img = new(TILE, TILE, (110, 114, 120, 255))
+    d = ImageDraw.Draw(img)
+    d.rectangle([2, 0, TILE - 3, TILE - 1], fill=(140, 144, 150, 255))
+    d.rectangle([2, 0, TILE - 3, TILE - 1], outline=(80, 84, 90, 255), width=2)
+    d.rectangle([6, 6, TILE - 7, 30], fill=(120, 124, 130, 255))
+    d.rectangle([6, 34, TILE - 7, 57], fill=(120, 124, 130, 255))
+    # card reader
+    d.rectangle([48, 28, 56, 40], fill=NEARBLACK + (255,))
+    d.rectangle([50, 30, 54, 33], fill=RED + (255,))
+    # ALLEEN PERSONEEL stripe
+    d.rectangle([6, 44, TILE - 7, 50], fill=YELLOW + (255,))
+    for x in range(6, TILE - 7, 6):
+        d.polygon([(x, 50), (x + 3, 44), (x + 6, 44), (x + 3, 50)],
+                  fill=NEARBLACK + (255,))
+    return noise(img, 5)
+
+
+def door_exit():
+    """Loading-dock door. Green = the way out. Ends the level."""
+    img = new(TILE, TILE, (60, 140, 70, 255))
+    d = ImageDraw.Draw(img)
+    d.rectangle([2, 0, TILE - 3, TILE - 1], fill=GREEN + (255,))
+    d.rectangle([2, 0, TILE - 3, TILE - 1], outline=(30, 100, 40, 255), width=2)
+    # NOODUITGANG sign: running figure
+    d.rectangle([20, 8, 44, 26], fill=(20, 90, 30, 255))
+    d.ellipse([28, 11, 32, 15], fill=WHITE + (255,))
+    d.polygon([(30, 16), (34, 22), (30, 22)], fill=WHITE + (255,))
+    d.line([(30, 22), (36, 24)], fill=WHITE + (255,), width=2)
+    d.line([(30, 22), (25, 24)], fill=WHITE + (255,), width=2)
+    # push bar
+    d.rectangle([8, 38, TILE - 9, 42], fill=STEEL + (255,))
+    return noise(img, 5)
+
+
+def floor_tiles():
+    img = new(TILE, TILE, OFFWHITE + (255,))
+    d = ImageDraw.Draw(img)
+    for gy in range(2):
+        for gx in range(2):
+            c = OFFWHITE if (gx + gy) % 2 == 0 else (204, 204, 198)
+            d.rectangle([gx * 32, gy * 32, gx * 32 + 30, gy * 32 + 30],
+                        fill=c + (255,))
+    # grout
+    d.rectangle([31, 0, 31, TILE - 1], fill=(160, 160, 155, 255))
+    d.rectangle([0, 31, TILE - 1, 31], fill=(160, 160, 155, 255))
+    d.rectangle([63, 0, 63, TILE - 1], fill=(160, 160, 155, 255))
+    d.rectangle([0, 63, TILE - 1, 63], fill=(160, 160, 155, 255))
+    return noise(img, 6)
+
+
+def ceiling_tiles():
+    img = new(TILE, TILE, (208, 208, 205, 255))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, TILE - 1, TILE - 1], outline=(180, 180, 176, 255), width=1)
+    d.rectangle([0, 28, TILE - 1, 35], fill=(240, 240, 232, 255))  # strip light
+    d.rectangle([0, 28, TILE - 1, 28], fill=(255, 255, 250, 255))
+    for _ in range(40):  # tile speckle
+        x, y = random.randint(0, TILE - 1), random.randint(0, TILE - 1)
+        d.point((x, y), fill=(190, 190, 186, 255))
+    return noise(img, 4)
+
+
+# --------------------------------------------------------------------------
+# Enemies — 6-frame strips: walk0, walk1, attack, die0, die1, die2
+# --------------------------------------------------------------------------
+
+def winkelwagen_frame(kind, t=0):
+    """Rogue shopping trolley. Fast, low HP, bites."""
+    img = new(ENEMY, ENEMY)
+    d = ImageDraw.Draw(img)
+    if kind == "die":
+        # Collapses into a heap of bent wire.
+        squash = [0, 12, 22][t]
+        top = 30 + squash
+        d.polygon([(10, top), (54, top), (48, 58), (16, 58)],
+                  fill=shade(STEEL, 0.9 - 0.15 * t) + (255,))
+        for i in range(4):
+            y = top + 4 + i * ((58 - top) // 5 or 1)
+            d.line([(12, y), (52, y)], fill=DARKGREY + (255,), width=1)
+        if t >= 1:
+            d.line([(6, 58), (20, 44)], fill=STEEL + (255,), width=2)   # sprung wire
+            d.line([(58, 58), (44, 46)], fill=STEEL + (255,), width=2)
+        if t == 2:
+            for _ in range(14):  # oil / blood puddle
+                px = random.randint(8, 56)
+                py = random.randint(54, 62)
+                d.point((px, py), fill=BLOOD + (255,))
+        return img
+
+    bob = 0 if kind != "walk" else (0 if t == 0 else 1)
+    lunge = 3 if kind == "attack" else 0
+
+    # basket (wireframe trapezoid)
+    top = 20 + bob - lunge
+    d.polygon([(12, top), (52, top), (46, 48 + bob), (18, 48 + bob)],
+              fill=(190, 194, 200, 255))
+    d.polygon([(12, top), (52, top), (46, 48 + bob), (18, 48 + bob)],
+              outline=DARKGREY + (255,))
+    for i in range(1, 5):  # wire mesh
+        y = top + i * 6
+        d.line([(13 + i, y), (51 - i, y)], fill=(150, 154, 160, 255), width=1)
+    for i in range(1, 6):
+        x = 14 + i * 6
+        d.line([(x, top + 1), (x - 1, 47 + bob)], fill=(150, 154, 160, 255), width=1)
+
+    # red handle
+    d.rectangle([10, top - 5, 54, top - 2], fill=RED + (255,))
+
+    # maw: the front of the basket is a mouth
+    mouth_open = 8 if kind == "attack" else 3
+    d.rectangle([20, 42 + bob, 44, 42 + bob + mouth_open],
+                fill=NEARBLACK + (255,))
+    for tx in range(21, 44, 5):  # teeth
+        d.polygon([(tx, 42 + bob), (tx + 2, 42 + bob + mouth_open - 1),
+                   (tx + 4, 42 + bob)], fill=WHITE + (255,))
+    if kind == "attack":
+        for tx in range(23, 44, 5):
+            d.polygon([(tx, 42 + bob + mouth_open),
+                       (tx + 2, 42 + bob + 1),
+                       (tx + 4, 42 + bob + mouth_open)], fill=OFFWHITE + (255,))
+        d.point((26, 44 + bob), fill=BLOOD + (255,))
+
+    # eyes glowing in the mesh
+    d.ellipse([22, top + 4, 27, top + 9], fill=RED + (255,))
+    d.ellipse([37, top + 4, 42, top + 9], fill=RED + (255,))
+    d.point((24, top + 6), fill=YELLOW + (255,))
+    d.point((39, top + 6), fill=YELLOW + (255,))
+
+    # wheels
+    wy = 54 + bob
+    for wx in (18, 44):
+        d.ellipse([wx - 5, wy - 5, wx + 5, wy + 5], fill=NEARBLACK + (255,))
+        d.ellipse([wx - 2, wy - 2, wx + 2, wy + 2], fill=GREY + (255,))
+    return img
+
+
+def vakkenvuller_frame(kind, t=0):
+    """Undead night-shift shelf stocker. Lobs soup cans."""
+    img = new(ENEMY, ENEMY)
+    d = ImageDraw.Draw(img)
+    if kind == "die":
+        drop = [6, 18, 28][t]
+        # crumpling body
+        d.rectangle([16, 30 + drop, 48, 58], fill=AH_BLUE + (255,))
+        d.ellipse([20 + t * 4, 24 + drop, 36 + t * 4, 40 + drop],
+                  fill=shade(ROT, 0.9) + (255,))
+        if t >= 1:
+            d.rectangle([10, 52, 54, 58], fill=shade(AH_BLUE, 0.7) + (255,))
+        if t == 2:
+            for _ in range(22):
+                px = random.randint(8, 56)
+                py = random.randint(52, 62)
+                d.point((px, py), fill=BLOOD + (255,))
+        return img
+
+    sway = 0 if kind != "walk" else (-1 if t == 0 else 1)
+    throw = kind == "attack"
+
+    # legs (dark trousers)
+    d.rectangle([24 - sway, 46, 30 - sway, 62], fill=(48, 50, 56, 255))
+    d.rectangle([34 + sway, 46, 40 + sway, 62], fill=(48, 50, 56, 255))
+
+    # AH-blue apron / polo
+    d.rectangle([20, 26, 44, 48], fill=AH_BLUE + (255,))
+    d.rectangle([20, 26, 44, 29], fill=AH_DARK + (255,))
+    d.rectangle([27, 34, 30, 44], fill=WHITE + (255,))  # crude 'AH' on the chest
+    d.rectangle([33, 34, 36, 44], fill=WHITE + (255,))
+    d.rectangle([27, 38, 36, 40], fill=WHITE + (255,))
+
+    # head — rotten
+    d.ellipse([24, 8, 40, 26], fill=ROT + (255,))
+    d.ellipse([27, 14, 30, 18], fill=NEARBLACK + (255,))  # sunken eyes
+    d.ellipse([34, 14, 37, 18], fill=NEARBLACK + (255,))
+    d.point((28, 15), fill=RED + (255,))
+    d.point((35, 15), fill=RED + (255,))
+    d.rectangle([28, 21, 36, 23], fill=NEARBLACK + (255,))  # slack jaw
+    d.line([(30, 21), (30, 23)], fill=OFFWHITE + (255,))
+    d.line([(34, 21), (34, 23)], fill=OFFWHITE + (255,))
+
+    if throw:
+        # arm cocked back above the head with a soup can
+        d.line([(44, 30), (52, 16)], fill=ROT + (255,), width=4)
+        d.rectangle([48, 6, 58, 16], fill=(200, 60, 50, 255))
+        d.rectangle([48, 9, 58, 11], fill=OFFWHITE + (255,))
+        d.rectangle([16, 30, 22, 46], fill=ROT + (255,))  # other arm forward
+    else:
+        d.rectangle([14 + sway, 28, 20 + sway, 46], fill=ROT + (255,))
+        d.rectangle([44 - sway, 28, 50 - sway, 46], fill=ROT + (255,))
+    return img
+
+
+def zelfscanner_frame(kind, t=0):
+    """Self-checkout terminal. Near-stationary hitscan turret. Shrieks."""
+    img = new(ENEMY, ENEMY)
+    d = ImageDraw.Draw(img)
+    if kind == "die":
+        tilt = [4, 14, 26][t]
+        d.rectangle([18, 30 + tilt, 46, 60], fill=(90, 94, 100, 255))
+        d.rectangle([20, 32 + tilt, 44, 48 + tilt // 2], fill=NEARBLACK + (255,))
+        # cracked screen
+        d.line([(22, 34 + tilt), (40, 46 + tilt // 2)], fill=WHITE + (255,))
+        d.line([(40, 34 + tilt), (26, 46 + tilt // 2)], fill=WHITE + (255,))
+        if t >= 1:
+            for _ in range(10):  # sparks
+                sx = random.randint(20, 44)
+                sy = random.randint(30 + tilt, 46 + tilt)
+                d.point((sx, sy), fill=YELLOW + (255,))
+        if t == 2:
+            for _ in range(16):
+                px = random.randint(12, 52)
+                py = random.randint(54, 62)
+                d.point((px, py), fill=(40, 40, 46, 255))
+        return img
+
+    bob = 0 if kind != "walk" else (0 if t == 0 else 1)
+    firing = kind == "attack"
+
+    # pedestal
+    d.rectangle([26, 46 + bob, 38, 60], fill=(110, 114, 120, 255))
+    d.ellipse([18, 56, 46, 63], fill=(80, 84, 90, 255))
+
+    # terminal body
+    d.rectangle([16, 12 + bob, 48, 48 + bob], fill=(150, 154, 160, 255))
+    d.rectangle([16, 12 + bob, 48, 48 + bob], outline=(90, 94, 100, 255), width=2)
+
+    # screen — the face
+    scr = RED if firing else (40, 60, 90)
+    d.rectangle([20, 16 + bob, 44, 38 + bob], fill=scr + (255,))
+    eye = WHITE if firing else AH_LIGHT
+    if firing:
+        # furious: X eyes, gaping mouth
+        d.line([(24, 20 + bob), (30, 26 + bob)], fill=eye + (255,), width=2)
+        d.line([(30, 20 + bob), (24, 26 + bob)], fill=eye + (255,), width=2)
+        d.line([(34, 20 + bob), (40, 26 + bob)], fill=eye + (255,), width=2)
+        d.line([(40, 20 + bob), (34, 26 + bob)], fill=eye + (255,), width=2)
+        d.ellipse([27, 29 + bob, 37, 36 + bob], fill=NEARBLACK + (255,))
+    else:
+        d.rectangle([24, 21 + bob, 29, 25 + bob], fill=eye + (255,))
+        d.rectangle([35, 21 + bob, 40, 25 + bob], fill=eye + (255,))
+        d.rectangle([26, 32 + bob, 38, 34 + bob], fill=eye + (255,))
+
+    # scanner eye + beam
+    d.ellipse([28, 40 + bob, 36, 46 + bob], fill=NEARBLACK + (255,))
+    d.ellipse([30, 42 + bob, 34, 45 + bob], fill=RED + (255,))
+    if firing:
+        d.line([(32, 44 + bob), (32, 63)], fill=(255, 60, 60, 200), width=3)
+        d.line([(32, 44 + bob), (32, 63)], fill=(255, 200, 200, 255), width=1)
+    return img
+
+
+def enemy_sheet(fn):
+    return strip([
+        fn("walk", 0), fn("walk", 1), fn("attack", 0),
+        fn("die", 0), fn("die", 1), fn("die", 2),
+    ])
+
+
+# --------------------------------------------------------------------------
+# Projectile + pickups
+# --------------------------------------------------------------------------
+
+def soepblik():
+    """The Vakkenvuller's thrown soup can."""
+    img = new(16, 16)
+    d = ImageDraw.Draw(img)
+    d.rectangle([3, 2, 12, 13], fill=(200, 60, 50, 255))
+    d.ellipse([3, 0, 12, 4], fill=STEEL + (255,))
+    d.ellipse([3, 11, 12, 15], fill=shade(STEEL, 0.8) + (255,))
+    d.rectangle([3, 6, 12, 9], fill=OFFWHITE + (255,))
+    d.rectangle([5, 7, 10, 8], fill=(200, 60, 50, 255))
+    return img
+
+
+def pickup_appelflap():
+    """+25 health. A warm apple turnover."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.polygon([(4, 24), (28, 24), (16, 6)], fill=(196, 148, 82, 255))
+    d.polygon([(7, 22), (25, 22), (16, 9)], fill=(220, 176, 108, 255))
+    for x in range(8, 26, 4):  # sugar crystals
+        d.point((x, 21), fill=WHITE + (255,))
+        d.point((x + 1, 19), fill=WHITE + (255,))
+    d.line([(6, 24), (26, 24)], fill=(150, 110, 60, 255), width=2)
+    return img
+
+
+def pickup_rookworst():
+    """+50 health. Still warm from the rotisserie."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([3, 12, 29, 22], radius=5, fill=(140, 70, 52, 255))
+    d.rounded_rectangle([5, 13, 27, 17], radius=3, fill=(176, 100, 76, 255))
+    d.line([(3, 17), (2, 14)], fill=(110, 56, 40, 255), width=2)
+    d.line([(29, 17), (30, 20)], fill=(110, 56, 40, 255), width=2)
+    for x in range(8, 26, 6):  # steam
+        d.point((x, 9), fill=(230, 230, 230, 160))
+        d.point((x + 1, 6), fill=(230, 230, 230, 110))
+    return img
+
+
+def pickup_labels():
+    """Ammo. A roll of price labels for the Prijspistool."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.ellipse([4, 6, 28, 28], fill=YELLOW + (255,))
+    d.ellipse([4, 6, 28, 28], outline=(180, 140, 30, 255), width=1)
+    d.ellipse([12, 14, 20, 22], fill=(190, 150, 40, 255))
+    d.ellipse([14, 16, 18, 20], fill=OFFWHITE + (255,))
+    # tail of labels peeling off
+    d.rectangle([26, 8, 31, 12], fill=WHITE + (255,))
+    d.rectangle([27, 9, 30, 10], fill=RED + (255,))
+    for i in range(3):
+        d.line([(6 + i * 7, 26), (8 + i * 7, 28)], fill=(180, 140, 30, 255))
+    return img
+
+
+def pickup_bonuskaart():
+    """Armour. The card that protects you from full price."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([3, 9, 29, 24], radius=2, fill=AH_BLUE + (255,))
+    d.rounded_rectangle([3, 9, 29, 24], radius=2,
+                        outline=AH_DARK + (255,), width=1)
+    d.rectangle([5, 12, 27, 14], fill=WHITE + (255,))
+    d.rectangle([5, 17, 16, 22], fill=YELLOW + (255,))  # magstripe / chip
+    d.rectangle([20, 18, 27, 21], fill=AH_LIGHT + (255,))
+    return img
+
+
+def pickup_keycard():
+    """The bedrijfsleider's pass. Opens the magazijn."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([6, 5, 26, 27], radius=2, fill=(230, 190, 50, 255))
+    d.rounded_rectangle([6, 5, 26, 27], radius=2,
+                        outline=(160, 120, 20, 255), width=1)
+    d.rectangle([9, 8, 23, 16], fill=(250, 230, 150, 255))
+    d.ellipse([13, 10, 19, 15], fill=(160, 120, 20, 255))  # tiny mugshot
+    d.rectangle([9, 19, 23, 20], fill=(160, 120, 20, 255))
+    d.rectangle([9, 22, 18, 23], fill=(160, 120, 20, 255))
+    d.rectangle([14, 2, 18, 5], fill=STEEL + (255,))  # lanyard clip
+    return img
+
+
+# --------------------------------------------------------------------------
+# Weapons — 3-frame strips: idle, fire/swing A, fire/swing B
+# --------------------------------------------------------------------------
+
+def stokbrood_frame(t):
+    """Melee. A baguette. Infinite ammo, no dignity."""
+    img = new(WEAPON_W, WEAPON_H)
+    d = ImageDraw.Draw(img)
+    # anchor: bottom-right, swinging up and to the left
+    angles = [(150, 140, 60, 40), (120, 130, 20, 20), (100, 138, 8, 70)]
+    x0, y0, x1, y1 = angles[t]
+    d.line([(x0 + 8, y0 + 6), (x1 + 8, y1 + 6)], fill=(150, 108, 60, 255), width=18)
+    d.line([(x0, y0), (x1, y1)], fill=(198, 150, 92, 255), width=16)
+    d.line([(x0 - 2, y0 - 2), (x1 - 2, y1 - 2)], fill=(224, 184, 128, 255), width=8)
+    # slashes across the crust
+    for i in range(1, 5):
+        px = x0 + (x1 - x0) * i / 5
+        py = y0 + (y1 - y0) * i / 5
+        d.line([(px - 4, py - 6), (px + 4, py + 2)],
+               fill=(160, 116, 66, 255), width=2)
+    # fist
+    d.ellipse([x0 - 10, y0 - 6, x0 + 12, y0 + 18], fill=FLESH + (255,))
+    if t == 2:  # impact
+        for _ in range(18):
+            sx = random.randint(x1 - 20, x1 + 20)
+            sy = random.randint(y1 - 20, y1 + 12)
+            d.point((sx, sy), fill=(235, 205, 160, 255))
+    return img
+
+
+def prijspistool_frame(t):
+    """Hitscan. A price-label gun. Staples the price of freedom to their face."""
+    img = new(WEAPON_W, WEAPON_H)
+    d = ImageDraw.Draw(img)
+    kick = [0, 6, 3][t]
+    bx, by = 78, 66 + kick
+
+    # body
+    d.rounded_rectangle([bx, by, bx + 40, by + 34], radius=3,
+                        fill=(70, 74, 82, 255))
+    d.rounded_rectangle([bx + 3, by + 3, bx + 37, by + 16], radius=2,
+                        fill=AH_BLUE + (255,))
+    # label roll on top
+    d.ellipse([bx + 8, by - 14, bx + 32, by + 6], fill=YELLOW + (255,))
+    d.ellipse([bx + 16, by - 6, bx + 24, by + 2], fill=(190, 150, 40, 255))
+    # muzzle / label head
+    d.rectangle([bx + 14, by - 24, bx + 26, by - 12], fill=STEEL + (255,))
+    # grip + hand
+    d.polygon([(bx + 10, by + 34), (bx + 32, by + 34),
+               (bx + 28, WEAPON_H), (bx + 6, WEAPON_H)],
+              fill=(50, 54, 60, 255))
+    d.ellipse([bx + 4, by + 30, bx + 34, WEAPON_H], fill=FLESH + (255,))
+    d.ellipse([bx + 10, by + 36, bx + 28, by + 52], fill=(178, 158, 132, 255))
+
+    if t >= 1:  # muzzle flash + ejected label
+        d.polygon([(bx + 20, by - 40), (bx + 8, by - 20), (bx + 32, by - 20)],
+                  fill=(255, 236, 160, 230))
+        d.polygon([(bx + 20, by - 32), (bx + 13, by - 20), (bx + 27, by - 20)],
+                  fill=WHITE + (255,))
+        d.rectangle([bx + 44, by - 6, bx + 56, by + 2], fill=WHITE + (255,))
+        d.rectangle([bx + 46, by - 4, bx + 54, by - 2], fill=RED + (255,))
+    return img
+
+
+# --------------------------------------------------------------------------
+# HUD
+# --------------------------------------------------------------------------
+
+def hud_face(state):
+    """Doom status-bar mugshot: ok / hurt / dead. Sweatier as it goes."""
+    img = new(FACE_W, FACE_H)
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, FACE_W - 1, FACE_H - 1], fill=(40, 42, 48, 255))
+
+    if state == "dead":
+        d.ellipse([10, 16, 38, 44], fill=(150, 140, 130, 255))
+        d.line([(14, 24), (22, 32)], fill=NEARBLACK + (255,), width=2)
+        d.line([(22, 24), (14, 32)], fill=NEARBLACK + (255,), width=2)
+        d.line([(26, 24), (34, 32)], fill=NEARBLACK + (255,), width=2)
+        d.line([(34, 24), (26, 32)], fill=NEARBLACK + (255,), width=2)
+        d.rectangle([18, 37, 30, 39], fill=NEARBLACK + (255,))
+        for _ in range(20):
+            d.point((random.randint(8, 40), random.randint(40, 54)),
+                    fill=BLOOD + (255,))
+        return img
+
+    hurt = state == "hurt"
+    skin = (190, 150, 130) if hurt else FLESH
+    # AH cap
+    d.rectangle([8, 8, 40, 18], fill=AH_BLUE + (255,))
+    d.rectangle([6, 17, 42, 20], fill=AH_DARK + (255,))
+    d.rectangle([20, 10, 22, 16], fill=WHITE + (255,))
+    d.rectangle([26, 10, 28, 16], fill=WHITE + (255,))
+    d.rectangle([20, 12, 28, 14], fill=WHITE + (255,))
+    # face
+    d.ellipse([10, 18, 38, 46], fill=skin + (255,))
+    d.rectangle([14, 26, 20, 30], fill=WHITE + (255,))
+    d.rectangle([28, 26, 34, 30], fill=WHITE + (255,))
+    pupil_y = 28 if not hurt else 27
+    d.rectangle([16, pupil_y, 18, pupil_y + 2], fill=NEARBLACK + (255,))
+    d.rectangle([30, pupil_y, 32, pupil_y + 2], fill=NEARBLACK + (255,))
+    if hurt:
+        d.line([(13, 24), (21, 22)], fill=NEARBLACK + (255,), width=2)  # scowl
+        d.line([(35, 24), (27, 22)], fill=NEARBLACK + (255,), width=2)
+        d.arc([16, 32, 32, 44], start=200, end=340, fill=NEARBLACK + (255,), width=2)
+        for _ in range(12):  # blood / sweat
+            d.point((random.randint(12, 36), random.randint(20, 44)),
+                    fill=BLOOD + (255,))
+    else:
+        d.rectangle([18, 36, 30, 38], fill=NEARBLACK + (255,))
+        d.line([(13, 23), (20, 23)], fill=NEARBLACK + (255,), width=1)
+        d.line([(28, 23), (35, 23)], fill=NEARBLACK + (255,), width=1)
+    # sweat bead
+    d.ellipse([37, 22, 40, 27], fill=AH_LIGHT + (255,))
+    return img
+
+
+def hud_panel():
+    """320x48 status-bar background. Stretch it across the screen bottom."""
+    img = new(320, 48, (52, 54, 60, 255))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, 319, 1], fill=AH_BLUE + (255,))
+    d.rectangle([0, 2, 319, 3], fill=AH_DARK + (255,))
+    d.rectangle([0, 46, 319, 47], fill=(30, 32, 36, 255))
+    # recessed cells for HEALTH / AMMO / ARMOR / KEY
+    for x in (8, 88, 168, 248):
+        d.rectangle([x, 10, x + 64, 40], fill=(36, 38, 44, 255))
+        d.rectangle([x, 10, x + 64, 40], outline=(80, 84, 92, 255), width=1)
+    return noise(img, 4)
+
+
+# --------------------------------------------------------------------------
+
+def main():
+    random.seed(SEED)
+    OUT.mkdir(exist_ok=True)
+    print("walls / floor / ceiling")
+    save(wall_shelf(True), "wall_shelf_full.png")
+    save(wall_shelf(False), "wall_shelf_empty.png")
+    save(wall_freezer(), "wall_freezer.png")
+    save(wall_plain(), "wall_plain.png")
+    save(wall_checkout(), "wall_checkout.png")
+    save(wall_magazijn(), "wall_magazijn.png")
+    save(door_keycard(), "door_keycard.png")
+    save(door_exit(), "door_exit.png")
+    save(floor_tiles(), "floor.png")
+    save(ceiling_tiles(), "ceiling.png")
+
+    print("enemies (6-frame strips)")
+    save(enemy_sheet(winkelwagen_frame), "enemy_winkelwagen.png")
+    save(enemy_sheet(vakkenvuller_frame), "enemy_vakkenvuller.png")
+    save(enemy_sheet(zelfscanner_frame), "enemy_zelfscanner.png")
+    save(soepblik(), "proj_soepblik.png")
+
+    print("pickups")
+    save(pickup_appelflap(), "pickup_appelflap.png")
+    save(pickup_rookworst(), "pickup_rookworst.png")
+    save(pickup_labels(), "pickup_labels.png")
+    save(pickup_bonuskaart(), "pickup_bonuskaart.png")
+    save(pickup_keycard(), "pickup_keycard.png")
+
+    print("weapons (3-frame strips)")
+    save(strip([stokbrood_frame(i) for i in range(3)]), "weapon_stokbrood.png")
+    save(strip([prijspistool_frame(i) for i in range(3)]), "weapon_prijspistool.png")
+
+    print("hud")
+    save(strip([hud_face("ok"), hud_face("hurt"), hud_face("dead")]), "hud_face.png")
+    save(hud_panel(), "hud_panel.png")
+    print("\ndone.")
+
+
+if __name__ == "__main__":
+    main()
