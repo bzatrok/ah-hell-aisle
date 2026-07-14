@@ -18,7 +18,7 @@ int main() {
     GameInit(game);
     RenderInit(game.world.map);   // the level never changes, so the geometry is built once
 
-    while (!WindowShouldClose()) {   // Esc quits, per SPEC §4
+    while (!WindowShouldClose()) {   // Esc quits on desktop; on web it returns to the title (game.cpp)
         // A stall — a window drag, a breakpoint — must not teleport anyone through a
         // shelf, so a frame is never worth more than 50ms of simulation.
         const float dt = (GetFrameTime() > 0.05f) ? 0.05f : GetFrameTime();

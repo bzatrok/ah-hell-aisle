@@ -24,10 +24,26 @@ void GameInit(Game& g) {
 void GameUpdate(Game& g, float dt) {
     AudioUpdate(dt, g.state == GameState::Playing);
 
+#if defined(__EMSCRIPTEN__)
+    // In a browser there is no quitting: raylib's web main loop never honours the
+    // exit key, and while the mouse is captured Chrome eats the first Esc to
+    // release pointer lock. So Esc abandons the run and returns to the title.
+    if (g.state != GameState::Title && IsKeyPressed(KEY_ESCAPE)) {
+        g.state = GameState::Title;
+        EnableCursor();
+        return;
+    }
+#endif
+
     switch (g.state) {
-        case GameState::Title:
-            if (GetKeyPressed() != 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) Restart(g);
+        case GameState::Title: {
+            // Esc is not "any key": on the web it just brought us here.
+            const int key = GetKeyPressed();
+            if ((key != 0 && key != KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                Restart(g);
+            }
             break;
+        }
 
         case GameState::Playing:
             WorldUpdate(g.world, dt);
