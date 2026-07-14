@@ -1,8 +1,10 @@
 # Handover 008 — Mobile touch controls for the web build
 
-**Branch:** `feature/mobile-controls` off `master` (note: the repo branch was renamed `main` → `master` on 2026-07-14), merged back to `master` when the acceptance checklist passes.
+**Branch:** `feature/mobile-controls` off `master` *after 007's `feature/expansion` has merged* (note: the repo branch was renamed `main` → `master` on 2026-07-14); merged back to `master` when the acceptance checklist passes.
 **Author:** session 2026-07-14 (the session that set up the GitHub remote + deploy docs)  ·  **Status:** pending
-**Scope:** make the deployed web build (https://ah-hell-aisle.pages.dev) playable on a phone. Controls decided with Ben: **tap = fire/use**, **horizontal swipe = weapon switch**, **accelerometer tilt = aim (steering-wheel roll)**, **virtual stick on the left half = movement**. Desktop and native behaviour must not change. Ben originally sequenced this before handover 007, but 007's execution started while this doc was being authored (its tasks A–C are on `master` as of `6cdd040`) — so this doc is written **order-independent**: every 007 overlap is called out inline. Check the log for 007's status first; do not touch 007's scope here.
+**Scope:** make the deployed web build (https://ah-hell-aisle.pages.dev) playable on a phone. Controls decided with Ben: **tap = fire/use**, **horizontal swipe = weapon switch**, **accelerometer tilt = aim (steering-wheel roll)**, **virtual stick on the left half = movement**. Desktop and native behaviour must not change.
+
+**Prerequisite (hard):** handover 007 (game expansion) must be **✅ done** in `handover_log.md` and merged to `master` before starting. This doc is written against 007's end state — 4 weapons with `hasWeapon[]` ownership, 3 levels, web Esc-to-title, music. If 007's row is not ✅, stop and report instead of guessing.
 
 ## 0. Shared context (read first)
 
@@ -11,12 +13,12 @@ Repo root `/…/random_stuff/`. Read `CLAUDE.md` (repo root) first — never tou
 | Concern | Where |
 |---|---|
 | All player input (aim/move/fire/use/weapons) | `claude/src/player.cpp` — `UpdateDoors` (KEY_E), `UpdateWeapon` (select keys + fire condition), `UpdateMovement` (mouse yaw + WASD). Line numbers omitted on purpose: 007's task F rewrites this file — anchor on the function names. |
-| State-screen input (title/dead/escaped restart) | `claude/src/game.cpp` (`GameUpdate` — Title/Dead/Escaped cases; already carries 007's web-Esc rewrite, commit `6cdd040`) |
-| Player struct, `WeaponId` | `claude/src/player.h` (2 weapons at authoring time; 4 + `hasWeapon[]` once 007 task F lands) |
+| State-screen input (title/dead/escaped restart) | `claude/src/game.cpp` (`GameUpdate` — Title/Dead/Escaped cases; post-007 it also carries web Esc-to-title, level progression and the M music toggle) |
+| Player struct, `WeaponId`, `hasWeapon[]` ownership | `claude/src/player.h` (post-007: 4 weapon slots, per-type ammo) |
 | Tuning constants (`kMouseSens` 0.0024 rad/px, `kTurnSpeed` 120°/s, `kMoveSpeed` 3.5) | `claude/src/config.h:17-19` |
 | Native build file list (new .cpp must be added) | `claude/CMakeLists.txt:28-39` |
 | Web shell page (all JS goes here) | `web/index.html` — start overlay `#start`, canvas `#canvas` |
-| Web compile (globs `src-web/*.cpp` — picks up new files automatically) | `web/build.sh:52` (**keep `-sGROWABLE_ARRAYBUFFERS=0`**) |
+| Web compile (globs `claude/src/*.cpp` directly since 007 task D — picks up new files automatically) | `web/build.sh` (**keep `-sGROWABLE_ARRAYBUFFERS=0`**) |
 
 Build & verify commands:
 
@@ -102,15 +104,15 @@ if (moving) {
     // …existing per-axis slide unchanged
 ```
 
-`player.cpp` `UpdateWeapon`: after the weapon-select key lines add the swipe cycle, and extend the fire condition. The cycle depends on whether 007's task F has landed — check `player.h` for `hasWeapon`:
+`player.cpp` `UpdateWeapon`: after the weapon-select key lines (1–4, ownership-gated since 007) add the swipe cycle — next/previous **owned** slot, wrapping, going through the same select path as the keys (so the `WeaponSwitch` sound and any select side-effects fire once):
 
 ```cpp
 if (int step = WebConsumeWeaponStep()) {
-    // pre-007-F (WeaponId still has 2 entries):
-    constexpr int kWeaponCount = 2;   // 007 task F upgrades this to owned-slot skipping
-    p.weapon = (WeaponId)((((int)p.weapon + step) % kWeaponCount + kWeaponCount) % kWeaponCount);
-    // post-007-F: instead step to the next/previous slot with hasWeapon[slot], wrapping —
-    // that ownership-aware cycle is the intended end state either way.
+    int slot = (int)p.weapon;
+    for (int i = 0; i < kWeaponCount; ++i) {          // at most one full lap
+        slot = ((slot + step) % kWeaponCount + kWeaponCount) % kWeaponCount;
+        if (p.hasWeapon[slot]) { /* select slot exactly like the number keys */ break; }
+    }
 }
 …
 const bool firing = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
@@ -122,10 +124,10 @@ const bool firing = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
 
 `player.cpp` `UpdateDoors`: `if (IsKeyPressed(KEY_E) || WebConsumeUsePressed()) {`
 
-`game.cpp` — tap advances every state screen (each state is the sole consumer of the edge that frame; when Playing, `UpdateWeapon` consumes it — `PlayerUpdate` early-returns before `UpdateWeapon` when dead, so there is no double-consume path). 007's task C already rewrote the Title case (commit `6cdd040`), so amend the conditions as they stand:
+`game.cpp` — tap advances every state screen (each state is the sole consumer of the edge that frame; when Playing, `UpdateWeapon` consumes it — `PlayerUpdate` early-returns before `UpdateWeapon` when dead, so there is no double-consume path). Amend the **conditions only**, never the action bodies — 007 changed what restarting means (R restarts the current level with the entry loadout):
 
-- Title case: append `|| WebConsumeFirePressed()` to the restart condition (currently `(key != 0 && key != KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)`).
-- Dead and Escaped cases: `if (IsKeyPressed(KEY_R) || WebConsumeFirePressed()) Restart(g);`
+- Title case: append `|| WebConsumeFirePressed()` to the restart condition (post-007 form: `(key != 0 && key != KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)`).
+- Dead and Escaped cases: append `|| WebConsumeFirePressed()` to their `IsKeyPressed(KEY_R)` checks.
 
 **Files:** `player.cpp` · `game.cpp`
 
@@ -177,6 +179,7 @@ A slow drag (>100 ms to move 12 px) commits as FIRING and can no longer become a
 
 ## Sequencing
 
+0. Preflight: `handover_log.md` row 007 is ✅ done and `feature/expansion` is merged; branch `feature/mobile-controls` off fresh `master`.
 1. Task 1 (shim) + task 2 (integration) + CMake entry → native build green, desktop behaviour identical (keyboard/mouse regression by hand).
 2. Task 3 (JS layer) → `./web/build.sh`, test in Chrome DevTools device emulation.
 3. Real-device pass on the preview URL — the deploy itself is **Ben-only**: ask him to run `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle --branch=mobile-preview` (a non-`main` `--branch` value yields a preview URL, production untouched).
@@ -185,18 +188,18 @@ A slow drag (>100 ms to move 12 px) commits as FIRING and can no longer become a
 ## Decisions — locked ✅
 
 - Controls: tap = fire (hold = autofire) + use; horizontal swipe right/left = next/prev weapon; tilt roll = turn (yaw only — the game has no pitch); floating virtual stick on the left half = move. Chosen by Ben 2026-07-14.
-- Order vs 007: originally "008 first" (Ben), overtaken by events — 007 started executing during authoring. This doc works from any point in 007's progression; the inline "pre/post-007-F" forks are the only order-sensitive spots. 007 was amended by the author where they overlap; the 008 executor does not edit 007.
+- Runs **after** handover 007 completes (Ben, 2026-07-14) — the prerequisite gate at the top is hard. The "if 008 has run first" interop notes inside 007's doc are dead branches from an earlier ordering; nobody acts on them.
 - Injection is exported-function based (`web_input` shim), **not** synthetic DOM events — raylib-web's pointer-lock and touch→mouse quirks make synthetic events unreliable. Mouse-look is gated off by `touchMode` for the same reason.
 - Tilt source is `devicemotion` gravity with runtime calibration (formula above); deviceorientation Euler angles rejected (gimbal trouble in landscape). Aim is rate-based with deadzone — thresholds as written, executor may tune any JS constant ±30 % for feel and notes deviations in the completion note.
 - No on-screen fire/weapon buttons; no pitch look; no gamepad; portrait mode just letterboxes (no CSS rotation hack). Motion-denied fallback = drag-look, nothing fancier.
-- Weapon cycle is count-based over the current 2 weapons; ownership-aware skipping is 007's job (already noted there).
+- Swipe cycle is ownership-aware from the start: next/prev owned slot, wrapping, same select semantics (and `WeaponSwitch` sound) as the 1–4 keys.
 - Desktop web and native must be pixel-for-pixel behaviourally unchanged. `runner-ups/` untouched, always. Deploys are Ben-only.
 
 ## Acceptance / pre-merge checklist
 
-- [ ] Native build clean from `claude/`; keyboard/mouse play unchanged (turn, WASD, fire, E, 1/2, R).
+- [ ] Native build clean from `claude/`; keyboard/mouse play unchanged (turn, WASD, fire, E, weapon keys 1–4, R, M).
 - [ ] `./web/build.sh` clean; desktop Chrome on :8080 plays unchanged; no `pageerror` in console.
-- [ ] DevTools device emulation (iPhone profile): tap fires (muzzle flash + sound); hold autofires; quick tap lands exactly one shot; stick walks all 8 directions with head-bob; swipe right/left switches weapon sprite both ways; tap starts the game from the title and restarts from GESLOTEN/escape screens.
+- [ ] DevTools device emulation (iPhone profile): tap fires (muzzle flash + sound); hold autofires; quick tap lands exactly one shot; stick walks all 8 directions with head-bob; swipe right/left cycles weapons both ways with the `WeaponSwitch` click, skipping unowned slots (fresh start: swipes only alternate slots 1–2; after picking up a new weapon it joins the cycle) and wrapping; tap starts the game from the title and restarts from GESLOTEN/escape screens.
 - [ ] `window.__mob.setGravity(…)`: tilt within ±3° holds still; beyond it turns, full rate by 25°; `__mob.state()` values sane.
 - [ ] Desktop (non-touch): no stick divs, no mobile hints, no listeners — DOM identical to before except the script block.
 - [ ] Real iPhone via preview deploy (Ben runs the deploy — command in Sequencing): motion permission prompt appears from the start tap; grant → tilting right turns right (else flip `SIGN` once and note it); deny → drag-look works and hint shows.

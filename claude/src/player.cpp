@@ -6,11 +6,52 @@
 #include "raymath.h"
 #include "world.h"
 
+static float WeaponAnimTotal(WeaponId id) {
+    switch (id) {
+        case WeaponId::Stokbrood:       return kMeleeAnim;
+        case WeaponId::Prijspistool:    return kGunAnim;
+        case WeaponId::Statiegeldkanon: return kScatterAnim;
+        case WeaponId::Vuurwerkpijl:    return kRocketAnim;
+    }
+    return kGunAnim;
+}
+
 int Player::weaponFrame() const {
     if (fireAnim <= 0.0f) return 0;
-    const float total = (weapon == WeaponId::Stokbrood) ? kMeleeAnim : kGunAnim;
-    const float t = 1.0f - fireAnim / total;
+    const float t = 1.0f - fireAnim / WeaponAnimTotal(weapon);
     return (t < 0.45f) ? 1 : 2;   // 1 = windup, 2 = impact
+}
+
+// The selected weapon's ammo pool, or null for the stokbrood (bread is free).
+int* PlayerAmmoPool(Player& p, WeaponId id) {
+    switch (id) {
+        case WeaponId::Prijspistool:    return &p.ammo;
+        case WeaponId::Statiegeldkanon: return &p.flessen;
+        case WeaponId::Vuurwerkpijl:    return &p.vuurwerk;
+        default:                        return nullptr;
+    }
+}
+
+PlayerLoadout CaptureLoadout(const Player& p) {
+    PlayerLoadout l;
+    l.health = p.health;
+    l.armour = p.armour;
+    l.ammo = p.ammo;
+    l.flessen = p.flessen;
+    l.vuurwerk = p.vuurwerk;
+    for (int i = 0; i < kWeaponCount; i++) l.hasWeapon[i] = p.hasWeapon[i];
+    l.weapon = p.weapon;
+    return l;
+}
+
+void ApplyLoadout(Player& p, const PlayerLoadout& l) {
+    p.health = l.health;
+    p.armour = l.armour;
+    p.ammo = l.ammo;
+    p.flessen = l.flessen;
+    p.vuurwerk = l.vuurwerk;
+    for (int i = 0; i < kWeaponCount; i++) p.hasWeapon[i] = l.hasWeapon[i];
+    p.weapon = l.weapon;
 }
 
 // --- doors -------------------------------------------------------------------
@@ -96,13 +137,12 @@ static void SwingStokbrood(World& w) {
     AlertEnemies(w, p.pos, kMeleeNoiseRange);
 }
 
-static void FirePrijspistool(World& w) {
-    Player& p = w.player;
-    const float spread = ((float)GetRandomValue(-100, 100) / 100.0f) * kGunSpread;
-    const float angle = p.yaw + spread;
+// One hitscan ray from the player at `angle`. Stops at the first thing it meets,
+// shelf or shopper; returns the shopper if that came first.
+static Enemy* HitscanRay(World& w, float angle) {
+    const Player& p = w.player;
     const Vector2 dir = {cosf(angle), sinf(angle)};
 
-    // A label stops at the first thing it meets: shelf or shopper.
     float nearest = w.map.RayToWall(p.pos, dir, kGunRange);
     Enemy* hit = nullptr;
 
@@ -122,6 +162,16 @@ static void FirePrijspistool(World& w) {
             hit = &e;
         }
     }
+    return hit;
+}
+
+static float SpreadAngle(float base, float spread) {
+    return base + ((float)GetRandomValue(-100, 100) / 100.0f) * spread;
+}
+
+static void FirePrijspistool(World& w) {
+    Player& p = w.player;
+    Enemy* hit = HitscanRay(w, SpreadAngle(p.yaw, kGunSpread));
 
     p.ammo--;
     p.muzzleFlash = 1.0f;
@@ -133,11 +183,59 @@ static void FirePrijspistool(World& w) {
     AlertEnemies(w, p.pos, kGunNoiseRange);
 }
 
+static void FireStatiegeldkanon(World& w) {
+    Player& p = w.player;
+    bool connected = false;
+    for (int i = 0; i < kScatterPellets; i++) {
+        if (Enemy* hit = HitscanRay(w, SpreadAngle(p.yaw, kScatterSpread))) {
+            EnemyHurt(w, *hit, kScatterDamage);
+            connected = true;
+        }
+    }
+
+    p.flessen--;
+    p.muzzleFlash = 1.0f;
+    PlaySfx(Sfx::Scattergun);
+    if (connected) PlaySfx(Sfx::Hit, 0.9f);
+    AlertEnemies(w, p.pos, kGunNoiseRange);
+}
+
+static void FireVuurwerkpijl(World& w) {
+    Player& p = w.player;
+    const Vector2 fwd = p.forward();
+
+    Projectile r;
+    r.kind = Projectile::Kind::Rocket;
+    r.ownerIsPlayer = true;
+    // The muzzle sits 0.43 ahead of you — inside the shelf if you fire with your
+    // nose against one. Detonating from a solid tile can see nothing, so the blast
+    // would be a dud; launch from where you stand instead and let it hit the wall.
+    r.pos = Vector2Add(p.pos, Vector2Scale(fwd, kPlayerRadius + 0.15f));
+    if (w.map.SolidAt(r.pos)) r.pos = p.pos;
+    r.vel = Vector2Scale(fwd, kRocketSpeed);
+    r.height = kRocketLaunchH;
+    r.life = 5.0f;
+    w.projectiles.push_back(r);
+
+    p.vuurwerk--;
+    p.muzzleFlash = 0.7f;
+    PlaySfx(Sfx::RocketLaunch);
+    AlertEnemies(w, p.pos, kGunNoiseRange);
+}
+
+static void SelectWeapon(Player& p, WeaponId id) {
+    if (!p.hasWeapon[(int)id] || p.weapon == id) return;
+    p.weapon = id;
+    PlaySfx(Sfx::WeaponSwitch, 0.8f);
+}
+
 static void UpdateWeapon(World& w, float dt) {
     Player& p = w.player;
 
-    if (IsKeyPressed(KEY_ONE)) p.weapon = WeaponId::Stokbrood;
-    if (IsKeyPressed(KEY_TWO)) p.weapon = WeaponId::Prijspistool;
+    if (IsKeyPressed(KEY_ONE)) SelectWeapon(p, WeaponId::Stokbrood);
+    if (IsKeyPressed(KEY_TWO)) SelectWeapon(p, WeaponId::Prijspistool);
+    if (IsKeyPressed(KEY_THREE)) SelectWeapon(p, WeaponId::Statiegeldkanon);
+    if (IsKeyPressed(KEY_FOUR)) SelectWeapon(p, WeaponId::Vuurwerkpijl);
 
     p.fireCooldown = fmaxf(0.0f, p.fireCooldown - dt);
     p.fireAnim = fmaxf(0.0f, p.fireAnim - dt);
@@ -150,13 +248,34 @@ static void UpdateWeapon(World& w, float dt) {
         p.fireCooldown = kMeleeCooldown;
         p.fireAnim = kMeleeAnim;
         SwingStokbrood(w);
-    } else if (p.ammo > 0) {
-        p.fireCooldown = kGunCooldown;
-        p.fireAnim = kGunAnim;
-        FirePrijspistool(w);
-    } else {
+        return;
+    }
+
+    int* pool = PlayerAmmoPool(p, p.weapon);
+    if (*pool <= 0) {
         p.fireCooldown = kGunCooldown;
         PlaySfx(Sfx::DryFire, 0.7f);
+        return;
+    }
+
+    switch (p.weapon) {
+        case WeaponId::Prijspistool:
+            p.fireCooldown = kGunCooldown;
+            p.fireAnim = kGunAnim;
+            FirePrijspistool(w);
+            break;
+        case WeaponId::Statiegeldkanon:
+            p.fireCooldown = kScatterCooldown;
+            p.fireAnim = kScatterAnim;
+            FireStatiegeldkanon(w);
+            break;
+        case WeaponId::Vuurwerkpijl:
+            p.fireCooldown = kRocketCooldown;
+            p.fireAnim = kRocketAnim;
+            FireVuurwerkpijl(w);
+            break;
+        default:
+            break;
     }
 }
 

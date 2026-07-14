@@ -32,7 +32,7 @@ struct Door {
 // One character of the authored level that becomes an entity rather than a tile.
 struct Spawn {
     int x, y;
-    char kind;        // '@' player, '1'..'3' enemies, 'a' 'r' 'l' 'b' 'k' pickups
+    char kind;        // '@' player, '1'..'5' enemies, 'a r l b k f v g p' pickups
 };
 
 struct Map {
@@ -66,6 +66,9 @@ struct Map {
     bool Fits(Vector2 pos, float radius) const;
 };
 
-// Builds the one hard-coded level and hands back everything that needs to become an
-// entity. There is only ever one level; see SPEC §11.
-Map LoadLevel(std::vector<Spawn>& spawns);
+// The run is three hand-authored levels. LoadLevel builds one of them and hands
+// back everything that needs to become an entity; LevelIntro is its HUD greeting.
+constexpr int kLevelCount = 3;
+
+Map LoadLevel(int level, std::vector<Spawn>& spawns);
+const char* LevelIntro(int level);

@@ -17,17 +17,21 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | ✅ done | `web/` | 2026-07-14 | 2026-07-14 |
 | 008 | [mobile-touch-controls](handover_008_mobile-touch-controls.md) | fresh session | Mobile web controls: tap fire/use, swipe weapons, tilt aim, virtual stick | ⬜ pending | `claude/src` + `web/` | 2026-07-14 | — |
 | 007 | [game-expansion](handover_007_game-expansion.md) | fresh session | Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music | 🔄 in-progress | `claude/` | 2026-07-14 | — |
+| 009 | [korona-parliament-fork](handover_009_korona-parliament-fork.md) | fresh session | Fork: Hungarian Parliament re-theme, regalia weapons, fictional cast | ⬜ pending | branch `korona`: `claude/` + `assets/` + `tools/` | 2026-07-14 | — |
 
 > **Arena result (2026-07-14):** `claude/` won and is unlocked for further development.
 > The other implementations were archived under `runner-ups/`.
 
 > **006 note (2026-07-14):** built and visually verified in headless Chrome — title screen, textured world, HUD and movement all render; `claude/`/`assets/` untouched. Fixed an initial black screen: emscripten 6 + `ALLOW_MEMORY_GROWTH` backs the heap with a resizable ArrayBuffer, which Chrome rejects for WebGL texture uploads; `-sGROWABLE_ARRAYBUFFERS=0` restores classic growth. Deploy confirmed live in production at https://ah-hell-aisle.pages.dev (source `dcc3cbd`) — closed 2026-07-14.
 
-> **007/008 ordering (2026-07-14):** Ben initially sequenced 008 before 007, but 007's execution
-> started while 008 was being authored (tasks A–C landed on `master` as of `6cdd040`) — so 008 is
-> written order-independent and in practice **runs after 007** (or after whatever part of it has
-> landed). 007 was amended in place for the overlap (task C snippet, task F weapon cycling) and its
-> `main` references updated to `master` after the branch rename.
+> **007/008 ordering (2026-07-14, Ben):** **008 runs after 007 completes** — its doc has a hard
+> prerequisite gate on row 007 being ✅ and is written against 007's end state (4-slot weapon
+> ownership, 3 levels, web Esc). The "if 008 has run first" interop notes inside 007's doc are
+> dead branches from an earlier ordering; 007's executor can ignore them.
+
+> **009 ordering (2026-07-14):** 009 also gates on row 007 ✅ (its doc checks for merged
+> expansion code on `main`), and is **independent of 008**. It works on the permanent fork
+> branch `korona`, which never merges back to `main`.
 
 ## Launch lines
 

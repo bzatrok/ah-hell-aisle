@@ -8,7 +8,8 @@
 namespace {
 
 void Restart(Game& g) {
-    WorldInit(g.world);
+    WorldStartRun(g.world);
+    RenderRebuild(g.world.map);
     g.state = GameState::Playing;
     DisableCursor();
 }
@@ -16,13 +17,18 @@ void Restart(Game& g) {
 }  // namespace
 
 void GameInit(Game& g) {
-    WorldInit(g.world);          // so the title screen has a world to hold
+    WorldStartRun(g.world);      // so the title screen has a world to hold
     g.state = GameState::Title;
     EnableCursor();
 }
 
 void GameUpdate(Game& g, float dt) {
-    AudioUpdate(dt, g.state == GameState::Playing);
+    AudioUpdate(dt, g.state == GameState::Playing,
+                g.state == GameState::Title ? -1 : g.world.level);
+
+    if (IsKeyPressed(KEY_M)) {
+        g.world.Message(AudioToggleMusic() ? "MUZIEK AAN" : "MUZIEK UIT");
+    }
 
 #if defined(__EMSCRIPTEN__)
     // In a browser there is no quitting: raylib's web main loop never honours the
@@ -37,9 +43,12 @@ void GameUpdate(Game& g, float dt) {
 
     switch (g.state) {
         case GameState::Title: {
-            // Esc is not "any key": on the web it just brought us here.
+            // Esc is not "any key": on the web it just brought us here. Neither is
+            // M — the title advertises it as the music toggle, and it already did
+            // that above.
             const int key = GetKeyPressed();
-            if ((key != 0 && key != KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if ((key != 0 && key != KEY_ESCAPE && key != KEY_M) ||
+                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 Restart(g);
             }
             break;
@@ -49,9 +58,16 @@ void GameUpdate(Game& g, float dt) {
             WorldUpdate(g.world, dt);
 
             if (g.world.escaped) {
-                g.state = GameState::Escaped;
-                EnableCursor();
-                PlaySfx(Sfx::Escaped);
+                if (g.world.level + 1 < kLevelCount) {
+                    // Through the dock door, into the next building.
+                    WorldNextLevel(g.world);
+                    RenderRebuild(g.world.map);
+                    PlaySfx(Sfx::LevelDone);
+                } else {
+                    g.state = GameState::Escaped;
+                    EnableCursor();
+                    PlaySfx(Sfx::Escaped);
+                }
             } else if (g.world.player.dead()) {
                 g.state = GameState::Dead;
                 EnableCursor();
@@ -61,11 +77,17 @@ void GameUpdate(Game& g, float dt) {
         case GameState::Dead:
             // The shop carries on without you. It just does not take your input.
             WorldUpdate(g.world, dt);
-            if (IsKeyPressed(KEY_R)) Restart(g);
+            if (IsKeyPressed(KEY_R)) {
+                // The current level again, with what you walked in carrying.
+                WorldRestartLevel(g.world);
+                RenderRebuild(g.world.map);
+                g.state = GameState::Playing;
+                DisableCursor();
+            }
             break;
 
         case GameState::Escaped:
-            if (IsKeyPressed(KEY_R)) Restart(g);
+            if (IsKeyPressed(KEY_R)) Restart(g);   // a victory lap starts over
             break;
     }
 }

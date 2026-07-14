@@ -29,7 +29,16 @@ namespace {
 
 constexpr float kFogDensity = 0.0105f;   // exp(-d^2 * k): the aisle fades out around ten tiles
 
-const char* kWorldVS = R"(#version 330
+// One shader source, two dialects: desktop GL 3.3 and WebGL 2's GLSL ES 3.00,
+// which also demands an explicit default float precision (highp is safe in the
+// vertex stage too — mediump there could jitter gl_Position math).
+#if defined(__EMSCRIPTEN__)
+#define GLSL_HEADER "#version 300 es\nprecision highp float;\n"
+#else
+#define GLSL_HEADER "#version 330\n"
+#endif
+
+const char* kWorldVS = GLSL_HEADER R"(
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 in vec4 vertexColor;
@@ -47,7 +56,7 @@ void main()
 }
 )";
 
-const char* kWorldFS = R"(#version 330
+const char* kWorldFS = GLSL_HEADER R"(
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragWorld;
@@ -75,7 +84,7 @@ void main()
 
 // Sprites are cutouts: throw away the transparent pixels so every billboard writes
 // real depth and occludes the ones behind it, whatever order they arrive in.
-const char* kSpriteFS = R"(#version 330
+const char* kSpriteFS = GLSL_HEADER R"(
 in vec2 fragTexCoord;
 in vec4 fragColor;
 uniform sampler2D texture0;
@@ -302,10 +311,12 @@ constexpr float kCanSize = 0.26f;
 void CollectSprites(const World& w, Vector3 eye, std::vector<Billboard>& out) {
     for (const Enemy& e : w.enemies) {
         const float size = StatsFor(e.kind).spriteSize;
+        // Sheets are 64px cells; the boss was drawn at 96 so he can carry detail.
+        const float cell = (e.kind == EnemyKind::Bedrijfsleider) ? 96.0f : 64.0f;
         const Vector3 at = {e.pos.x, 0.0f, e.pos.y};
         const Color tint = FlashWhite(LightFor(w, at, eye), e.hurtFlash);
         out.push_back({gAssets.enemy[(int)e.kind],
-                       {e.frame() * 64.0f, 0.0f, 64.0f, 64.0f},
+                       {e.frame() * cell, 0.0f, cell, cell},
                        at,
                        {size, size},
                        tint,
@@ -325,12 +336,14 @@ void CollectSprites(const World& w, Vector3 eye, std::vector<Billboard>& out) {
     }
 
     for (const Projectile& p : w.projectiles) {
-        // Centre the can on its flight path rather than hanging it below.
-        const Vector3 at = {p.pos.x, p.height - kCanSize * 0.5f, p.pos.y};
-        out.push_back({gAssets.soupCan,
+        // Centre the projectile on its flight path rather than hanging it below.
+        const bool rocket = p.kind == Projectile::Kind::Rocket;
+        const float size = rocket ? 0.30f : kCanSize;
+        const Vector3 at = {p.pos.x, p.height - size * 0.5f, p.pos.y};
+        out.push_back({rocket ? gAssets.rocket : gAssets.soupCan,
                        {0.0f, 0.0f, 16.0f, 16.0f},
                        at,
-                       {kCanSize, kCanSize},
+                       {size, size},
                        LightFor(w, at, eye),
                        Vector3DistanceSqr(at, eye)});
     }
@@ -363,19 +376,9 @@ void DrawBeams(const World& w) {
     }
 }
 
-}  // namespace
-
-// --- lifecycle --------------------------------------------------------------
-
-void RenderInit(const Map& map) {
-    g.world = LoadShaderFromMemory(kWorldVS, kWorldFS);
-    g.sprite = LoadShaderFromMemory(nullptr, kSpriteFS);   // raylib's default vertex stage
-    g.locViewPos = GetShaderLocation(g.world, "viewPos");
-    g.locFlicker = GetShaderLocation(g.world, "flicker");
-    g.locFlash = GetShaderLocation(g.world, "flash");
-
-    // One mesh per wall texture: every solid tile of that kind contributes its exposed
-    // faces, and the whole store draws in a handful of calls.
+// One mesh per wall texture: every solid tile of that kind contributes its exposed
+// faces, and the whole level draws in a handful of calls.
+void BuildGeometry(const Map& map) {
     MeshBuilder walls[kTileKindCount];
     MeshBuilder floorB;
     MeshBuilder ceilB;
@@ -417,15 +420,53 @@ void RenderInit(const Map& map) {
     for (const Door& d : map.doors) BuildDoor(map, d);
 }
 
-void RenderShutdown() {
+// Frees a material's map array without UnloadMaterial, which would also unload
+// the shader — ours is shared across every material and must outlive them all.
+void FreeMaterial(Material& m) {
+    MemFree(m.maps);
+    m.maps = nullptr;
+}
+
+void UnloadGeometry() {
     for (int i = 0; i < kTileKindCount; i++) {
-        if (g.hasWall[i]) UnloadMesh(g.walls[i]);
+        if (g.hasWall[i]) {
+            UnloadMesh(g.walls[i]);
+            FreeMaterial(g.wallMat[i]);
+        }
+        g.hasWall[i] = false;
     }
     UnloadMesh(g.floorMesh);
     UnloadMesh(g.ceilMesh);
-    for (DoorMesh& d : g.doors) UnloadMesh(d.mesh);
+    FreeMaterial(g.floorMat);
+    FreeMaterial(g.ceilMat);
+    for (DoorMesh& d : g.doors) {
+        UnloadMesh(d.mesh);
+        FreeMaterial(d.material);
+    }
     g.doors.clear();
+}
 
+}  // namespace
+
+// --- lifecycle --------------------------------------------------------------
+
+void RenderInit(const Map& map) {
+    g.world = LoadShaderFromMemory(kWorldVS, kWorldFS);
+    g.sprite = LoadShaderFromMemory(nullptr, kSpriteFS);   // raylib's default vertex stage
+    g.locViewPos = GetShaderLocation(g.world, "viewPos");
+    g.locFlicker = GetShaderLocation(g.world, "flicker");
+    g.locFlash = GetShaderLocation(g.world, "flash");
+
+    BuildGeometry(map);
+}
+
+void RenderRebuild(const Map& map) {
+    UnloadGeometry();
+    BuildGeometry(map);
+}
+
+void RenderShutdown() {
+    UnloadGeometry();
     UnloadShader(g.world);
     UnloadShader(g.sprite);
 }

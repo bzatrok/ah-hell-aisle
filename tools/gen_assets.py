@@ -604,6 +604,295 @@ def prijspistool_frame(t):
 
 
 # --------------------------------------------------------------------------
+# Expansion set (handover 007). Only ever ADD below this line and call the new
+# functions at the END of main(): the originals must keep drawing the exact
+# same random stream so the frozen competition assets stay byte-identical.
+# --------------------------------------------------------------------------
+
+BOSS = 96  # the bedrijfsleider gets a bigger cell; everyone else stays 64
+
+
+def beveiliger_frame(kind, t=0):
+    """Possessed security guard. Advancing single-shot marksman."""
+    img = new(ENEMY, ENEMY)
+    d = ImageDraw.Draw(img)
+    if kind == "die":
+        drop = [8, 20, 30][t]
+        # keels over sideways, radio still crackling
+        body_top = min(32 + drop, 54)
+        d.rectangle([14, body_top, 50, 62], fill=(28, 30, 38, 255))
+        d.rectangle([14, body_top, 50, body_top + 6], fill=YELLOW + (255,))
+        d.ellipse([18 + t * 6, 26 + drop, 34 + t * 6, 42 + drop],
+                  fill=shade(ROT, 0.85) + (255,))
+        if t >= 1:
+            d.rectangle([8, 54, 20, 58], fill=(28, 30, 38, 255))  # dropped cap
+        if t == 2:
+            for _ in range(18):
+                d.point((random.randint(10, 54), random.randint(52, 62)),
+                        fill=BLOOD + (255,))
+        return img
+
+    sway = 0 if kind != "walk" else (-1 if t == 0 else 1)
+    aiming = kind == "attack"
+
+    # legs — black uniform trousers
+    d.rectangle([24 - sway, 46, 30 - sway, 62], fill=(24, 26, 32, 255))
+    d.rectangle([34 + sway, 46, 40 + sway, 62], fill=(24, 26, 32, 255))
+
+    # torso — dark shirt under a hi-vis vest
+    d.rectangle([20, 26, 44, 48], fill=(34, 36, 44, 255))
+    d.rectangle([22, 28, 42, 46], fill=(228, 176, 36, 255))       # the vest
+    d.rectangle([22, 33, 42, 36], fill=(200, 204, 210, 255))      # reflector band
+    d.rectangle([22, 41, 42, 43], fill=(200, 204, 210, 255))
+
+    # head — rotten, peaked cap
+    d.ellipse([24, 10, 40, 27], fill=shade(ROT, 0.92) + (255,))
+    d.rectangle([22, 8, 42, 14], fill=(24, 26, 32, 255))          # cap
+    d.rectangle([24, 14, 40, 15], fill=(60, 64, 74, 255))         # visor
+    d.ellipse([27, 17, 30, 20], fill=NEARBLACK + (255,))
+    d.ellipse([34, 17, 37, 20], fill=NEARBLACK + (255,))
+    d.point((28, 18), fill=RED + (255,))
+    d.point((35, 18), fill=RED + (255,))
+    d.rectangle([29, 23, 35, 24], fill=NEARBLACK + (255,))
+
+    if aiming:
+        # both arms out front, pistol levelled at you
+        d.rectangle([28, 30, 58, 34], fill=shade(ROT, 0.9) + (255,))
+        d.rectangle([52, 27, 60, 33], fill=(50, 54, 62, 255))     # the sidearm
+        d.point((60, 30), fill=RED + (255,))                       # laser diode
+    else:
+        d.rectangle([14 + sway, 28, 20 + sway, 46], fill=shade(ROT, 0.9) + (255,))
+        d.rectangle([44 - sway, 28, 50 - sway, 46], fill=shade(ROT, 0.9) + (255,))
+        # shouldered radio
+        d.rectangle([20, 27, 24, 33], fill=(50, 54, 62, 255))
+        d.point((22, 28), fill=GREEN + (255,))
+    return img
+
+
+def bedrijfsleider_frame(kind, t=0):
+    """De Bedrijfsleider. The manager. The level-3 boss. He never closed a shift
+    and he is not starting tonight."""
+    img = new(BOSS, BOSS)
+    d = ImageDraw.Draw(img)
+    if kind == "die":
+        drop = [12, 30, 46][t]
+        # the big man goes down like a pallet of crates
+        d.rectangle([20, 44 + drop, 76, 92], fill=(238, 240, 242, 255))
+        d.rectangle([20, 44 + drop, 76, 52 + drop], fill=AH_BLUE + (255,))
+        d.ellipse([28 + t * 8, 36 + drop, 52 + t * 8, 60 + drop],
+                  fill=shade(FLESH, 0.8) + (255,))
+        if t >= 1:
+            for _ in range(10):  # scattered paperwork
+                px = random.randint(14, 82)
+                py = random.randint(80, 92)
+                d.rectangle([px, py, px + 5, py + 3], fill=WHITE + (255,))
+        if t == 2:
+            for _ in range(30):
+                d.point((random.randint(14, 82), random.randint(78, 94)),
+                        fill=BLOOD + (255,))
+            # the pass glints where he fell — this is what you came for
+            d.rectangle([44, 84, 52, 90], fill=(230, 190, 50, 255))
+        return img
+
+    sway = 0 if kind != "walk" else (-2 if t == 0 else 2)
+    raging = kind == "attack"
+
+    # legs — grey slacks, wide stance
+    d.rectangle([32 - sway, 68, 42 - sway, 94], fill=(70, 72, 80, 255))
+    d.rectangle([54 + sway, 68, 64 + sway, 94], fill=(70, 72, 80, 255))
+
+    # torso — white shirt straining, AH-blue tie, rolled sleeves
+    d.rectangle([26, 34, 70, 70], fill=(238, 240, 242, 255))
+    d.polygon([(48, 36), (44, 52), (48, 66), (52, 52)], fill=AH_BLUE + (255,))
+    d.rectangle([26, 34, 70, 38], fill=(216, 218, 222, 255))      # collar shadow
+    d.rectangle([40, 40, 46, 46], fill=AH_BLUE + (255,))          # name badge
+    d.rectangle([41, 41, 45, 43], fill=WHITE + (255,))
+
+    # head — flushed with rage, manager haircut
+    face = (214, 120, 96) if raging else (204, 156, 128)
+    d.ellipse([34, 8, 62, 36], fill=face + (255,))
+    d.rectangle([34, 8, 62, 14], fill=(88, 66, 48, 255))          # side parting
+    d.rectangle([34, 8, 46, 18], fill=(88, 66, 48, 255))
+    if raging:
+        d.line([(38, 18), (46, 22)], fill=NEARBLACK + (255,), width=2)   # knotted brows
+        d.line([(58, 18), (50, 22)], fill=NEARBLACK + (255,), width=2)
+        d.ellipse([40, 22, 45, 27], fill=WHITE + (255,))
+        d.ellipse([51, 22, 56, 27], fill=WHITE + (255,))
+        d.point((42, 24), fill=RED + (255,))
+        d.point((53, 24), fill=RED + (255,))
+        d.ellipse([42, 29, 54, 35], fill=NEARBLACK + (255,))      # bellowing
+    else:
+        d.rectangle([40, 22, 45, 25], fill=NEARBLACK + (255,))
+        d.rectangle([51, 22, 56, 25], fill=NEARBLACK + (255,))
+        d.rectangle([42, 30, 54, 32], fill=NEARBLACK + (255,))
+
+    if raging:
+        # one arm hurling stock, the other clenched
+        d.rectangle([66, 20, 76, 44], fill=(238, 240, 242, 255))
+        d.ellipse([66, 12, 80, 26], fill=face + (255,))
+        d.rectangle([70, 4, 82, 16], fill=(200, 60, 50, 255))     # soup, of course
+        d.rectangle([70, 8, 82, 10], fill=OFFWHITE + (255,))
+        d.rectangle([18, 40, 28, 62], fill=(238, 240, 242, 255))
+        d.ellipse([16, 58, 30, 70], fill=face + (255,))
+    else:
+        d.rectangle([16 + sway, 38, 26 + sway, 64], fill=(238, 240, 242, 255))
+        d.rectangle([70 - sway, 38, 80 - sway, 64], fill=(238, 240, 242, 255))
+        d.ellipse([16 + sway, 60, 26 + sway, 70], fill=face + (255,))
+        d.ellipse([70 - sway, 60, 80 - sway, 70], fill=face + (255,))
+    # keycard on a lanyard — the drop you are owed
+    d.line([(48, 38), (48, 50)], fill=(160, 120, 20, 255))
+    d.rectangle([45, 50, 51, 55], fill=(230, 190, 50, 255))
+    return img
+
+
+def statiegeldkanon_frame(t):
+    """Scattergun. A bottle-return intake that fires the deposit back."""
+    img = new(WEAPON_W, WEAPON_H)
+    d = ImageDraw.Draw(img)
+    kick = [0, 8, 4][t]
+    bx, by = 70, 62 + kick
+
+    # the intake drum — statiegeld-machine green, ringed
+    d.ellipse([bx, by - 26, bx + 56, by + 30], fill=(52, 120, 62, 255))
+    d.ellipse([bx + 6, by - 20, bx + 50, by + 24], fill=(70, 150, 80, 255))
+    d.ellipse([bx + 14, by - 12, bx + 42, by + 16], fill=NEARBLACK + (255,))  # bore
+    for i in range(3):  # bottle throats inside the bore
+        ang_x = bx + 20 + i * 8
+        d.ellipse([ang_x, by - 6 + (i % 2) * 6, ang_x + 7, by + 1 + (i % 2) * 6],
+                  fill=(40, 44, 50, 255))
+    # deposit sticker
+    d.rectangle([bx + 4, by + 18, bx + 30, by + 26], fill=YELLOW + (255,))
+    d.rectangle([bx + 6, by + 20, bx + 28, by + 24], fill=(52, 120, 62, 255))
+
+    # body / hopper it is torn from, and the carrying arm
+    d.rectangle([bx + 10, by + 26, bx + 46, WEAPON_H], fill=(60, 64, 72, 255))
+    d.ellipse([bx + 16, by + 34, bx + 44, WEAPON_H + 8], fill=FLESH + (255,))
+
+    if t >= 1:
+        # a fan of glass and foam out of the bore
+        for i in range(7):
+            ex = bx + 28 + random.randint(-26, 26)
+            ey = by - 34 - random.randint(0, 22)
+            d.line([(bx + 28, by - 8), (ex, ey)],
+                   fill=(220, 240, 230, 220), width=2)
+        d.polygon([(bx + 28, by - 36), (bx + 12, by - 12), (bx + 44, by - 12)],
+                  fill=(255, 236, 160, 235))
+        # one whole bottle tumbling out
+        d.rectangle([bx + 40, by - 44, bx + 46, by - 30], fill=(140, 190, 120, 230))
+        d.rectangle([bx + 42, by - 48, bx + 44, by - 44], fill=STEEL + (255,))
+    return img
+
+
+def vuurwerkpijl_frame(t):
+    """Rocket launcher. An illegal New Year's vuurwerkpijl, hand-launched."""
+    img = new(WEAPON_W, WEAPON_H)
+    d = ImageDraw.Draw(img)
+    kick = [0, 10, 5][t]
+    bx, by = 92, 58 + kick
+
+    # launch tube: a length of drainpipe, held from below
+    d.polygon([(bx - 6, by + 30), (bx + 34, by - 26),
+               (bx + 46, by - 18), (bx + 6, by + 38)], fill=(120, 124, 132, 255))
+    d.polygon([(bx + 34, by - 26), (bx + 46, by - 18), (bx + 43, by - 26),
+               (bx + 37, by - 30)], fill=(80, 84, 92, 255))
+
+    if t == 0:
+        # the rocket waiting in the tube: red cone, stick out of the back
+        d.polygon([(bx + 36, by - 34), (bx + 30, by - 22), (bx + 44, by - 22)],
+                  fill=RED + (255,))
+        d.rectangle([bx + 33, by - 24, bx + 41, by - 16], fill=(208, 120, 40, 255))
+        d.line([(bx - 2, by + 26), (bx + 20, by - 4)], fill=BROWN + (255,), width=3)
+    else:
+        # gone — flame out of both ends of the pipe
+        d.polygon([(bx + 40, by - 22 - 26), (bx + 26, by - 18), (bx + 52, by - 12)],
+                  fill=(255, 200, 60, 240))
+        d.polygon([(bx + 40, by - 22 - 14), (bx + 32, by - 18), (bx + 47, by - 14)],
+                  fill=WHITE + (255,))
+        for _ in range(12):  # sparks
+            sx = bx + 30 + random.randint(-10, 26)
+            sy = by - 44 + random.randint(-16, 20)
+            d.point((sx, sy), fill=YELLOW + (255,))
+        d.polygon([(bx - 10, by + 36), (bx + 2, by + 26), (bx + 10, by + 40)],
+                  fill=(255, 160, 60, 200))
+
+    # hands: one on the pipe, one bracing
+    d.ellipse([bx + 2, by + 8, bx + 26, by + 32], fill=FLESH + (255,))
+    d.ellipse([bx + 26, by + 30, bx + 50, WEAPON_H + 6], fill=FLESH + (255,))
+    return img
+
+
+def pickup_flessen():
+    """Scattergun ammo: a crate of empty deposit bottles."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.rectangle([3, 14, 29, 28], fill=(52, 120, 62, 255))
+    d.rectangle([3, 14, 29, 28], outline=(30, 84, 40, 255), width=1)
+    d.rectangle([5, 19, 27, 21], fill=(30, 84, 40, 255))  # crate slot
+    for i, x in enumerate(range(6, 27, 5)):  # necks poking out
+        d.rectangle([x, 8 - (i % 2), x + 2, 15], fill=(140, 190, 120, 255))
+        d.rectangle([x, 6 - (i % 2), x + 2, 8 - (i % 2)], fill=STEEL + (255,))
+    return img
+
+
+def pickup_vuurwerk():
+    """Rocket ammo: a bundle of vuurwerkpijlen wrapped in cellophane."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    for i, x in enumerate([8, 14, 20]):
+        top = 6 + (i % 2) * 2
+        d.polygon([(x + 2, top), (x, top + 6), (x + 4, top + 6)], fill=RED + (255,))
+        d.rectangle([x, top + 6, x + 4, top + 16], fill=(208, 120, 40, 255))
+        d.line([(x + 2, top + 16), (x + 2, 28)], fill=BROWN + (255,))
+    d.rectangle([6, 18, 26, 20], fill=YELLOW + (255,))  # warning band
+    d.point((10, 19), fill=NEARBLACK + (255,))
+    d.point((16, 19), fill=NEARBLACK + (255,))
+    d.point((22, 19), fill=NEARBLACK + (255,))
+    return img
+
+
+def pickup_statiegeldkanon():
+    """Weapon pickup: the statiegeldkanon on the floor."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.ellipse([4, 10, 24, 26], fill=(52, 120, 62, 255))
+    d.ellipse([8, 13, 20, 23], fill=(70, 150, 80, 255))
+    d.ellipse([11, 15, 17, 21], fill=NEARBLACK + (255,))
+    d.rectangle([22, 14, 30, 22], fill=(60, 64, 72, 255))  # stub of hopper
+    d.rectangle([6, 24, 22, 26], fill=YELLOW + (255,))     # deposit sticker
+    return img
+
+
+def pickup_vuurwerkpijl():
+    """Weapon pickup: the launch pipe with a rocket loaded."""
+    img = new(PICKUP, PICKUP)
+    d = ImageDraw.Draw(img)
+    d.polygon([(4, 26), (22, 8), (27, 12), (9, 30)], fill=(120, 124, 132, 255))
+    d.polygon([(24, 2), (20, 10), (28, 10)], fill=RED + (255,))
+    d.rectangle([22, 10, 26, 14], fill=(208, 120, 40, 255))
+    d.line([(6, 24), (16, 12)], fill=BROWN + (255,), width=2)
+    return img
+
+
+def proj_vuurwerkpijl():
+    """The rocket in flight, 16x16, billboarded like the soup can."""
+    img = new(16, 16)
+    d = ImageDraw.Draw(img)
+    d.polygon([(12, 2), (9, 7), (15, 7)], fill=RED + (255,))     # cone
+    d.rectangle([10, 7, 14, 11], fill=(208, 120, 40, 255))       # motor
+    d.line([(11, 11), (5, 15)], fill=BROWN + (255,))             # stick
+    d.polygon([(10, 12), (4, 14), (8, 8)], fill=(255, 200, 60, 255))  # exhaust
+    d.point((5, 12), fill=WHITE + (255,))
+    return img
+
+
+def boss_sheet(fn):
+    return strip([
+        fn("walk", 0), fn("walk", 1), fn("attack", 0),
+        fn("die", 0), fn("die", 1), fn("die", 2),
+    ])
+
+
+# --------------------------------------------------------------------------
 # HUD
 # --------------------------------------------------------------------------
 
@@ -707,6 +996,25 @@ def main():
     print("hud")
     save(strip([hud_face("ok"), hud_face("hurt"), hud_face("dead")]), "hud_face.png")
     save(hud_panel(), "hud_panel.png")
+
+    # Everything below was added by handover 007 and MUST stay below: the frozen
+    # originals above consume the random stream first and stay byte-identical.
+    print("expansion enemies")
+    save(enemy_sheet(beveiliger_frame), "enemy_beveiliger.png")
+    save(boss_sheet(bedrijfsleider_frame), "enemy_bedrijfsleider.png")
+
+    print("expansion weapons")
+    save(strip([statiegeldkanon_frame(i) for i in range(3)]),
+         "weapon_statiegeldkanon.png")
+    save(strip([vuurwerkpijl_frame(i) for i in range(3)]),
+         "weapon_vuurwerkpijl.png")
+
+    print("expansion pickups + projectile")
+    save(pickup_flessen(), "pickup_flessen.png")
+    save(pickup_vuurwerk(), "pickup_vuurwerk.png")
+    save(pickup_statiegeldkanon(), "pickup_statiegeldkanon.png")
+    save(pickup_vuurwerkpijl(), "pickup_vuurwerkpijl.png")
+    save(proj_vuurwerkpijl(), "proj_vuurwerkpijl.png")
     print("\ndone.")
 
 

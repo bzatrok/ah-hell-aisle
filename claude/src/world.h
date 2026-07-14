@@ -13,7 +13,7 @@ struct HudMessage {
     float life = 0.0f;
 };
 
-// Everything that gets thrown away and rebuilt when you press R.
+// The run: three levels crossed in sequence, one World for all of them.
 struct World {
     Map map;
     Player player;
@@ -21,15 +21,25 @@ struct World {
     std::vector<Pickup> pickups;
     std::vector<Projectile> projectiles;
 
-    int kills = 0;
-    int totalEnemies = 0;
+    int level = 0;             // index into the run, 0-based
+    int kills = 0;             // all three accumulate across levels: the
+    int totalEnemies = 0;      // end screens score the run, not the level
     float elapsed = 0.0f;
-    bool escaped = false;      // you touched the loading dock door
+    bool escaped = false;      // you touched this level's loading dock door
     float shake = 0.0f;
+
+    // Taken on level entry; R rewinds to it, so dying costs you the level and
+    // nothing else. Entering level 3 on 4 health is your problem — Doom rules.
+    PlayerLoadout entryLoadout{};
+    int entryKills = 0;
+    int entryTotalEnemies = 0;
+    float entryElapsed = 0.0f;
 
     std::vector<HudMessage> messages;
     void Message(std::string text);
 };
 
-void WorldInit(World& w);
+void WorldStartRun(World& w);       // level 1, factory loadout
+void WorldNextLevel(World& w);      // carry the loadout through the dock door
+void WorldRestartLevel(World& w);   // R: this level again, entry loadout
 void WorldUpdate(World& w, float dt);

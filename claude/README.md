@@ -1,7 +1,10 @@
 # AH: Hell Aisle — claude
 
 A Doom 2 clone set in an Albert Heijn after closing time. C++17, raylib, CMake, no
-other dependencies. Written from `../SPEC.md`, using the frozen art in `../assets/`.
+other dependencies. Written from `../SPEC.md`, using the generated art in
+`../assets/`; expanded after the bake-off to three levels, four weapons and five
+enemies (handover 007). A WASM build lives in `../web/` (`../web/build.sh`) and
+deploys to Cloudflare Pages.
 
 ## Build and run
 
@@ -25,12 +28,18 @@ this folder as shown. Builds clean under `-Wall -Wextra`.
 | Left mouse, or `Ctrl` | Swing / fire |
 | `1` | Stokbrood — baguette, melee, 25 damage, infinite |
 | `2` | Prijspistool — label gun, hitscan, 20 damage, uses labels |
+| `3` | Statiegeldkanon — 7 pellets of deposit glass, uses flessen (find it first) |
+| `4` | Vuurwerkpijl — rocket, 80 at the centre, hurts you too (find it first) |
 | `E` | Open the magazijn door |
-| `Esc` | Quit |
-| `R` | Restart, on the death or victory screen |
+| `M` | Music on / off |
+| `Esc` | Quit (desktop) — on the web build it returns to the title |
+| `R` | On the death screen: this level again, with what you walked in carrying |
 
-Find the bedrijfsleider's pass in the freezer, open the magazijn, touch the loading
-dock door. Twenty-four things in the shop would rather you did not.
+Three buildings between you and the car park: the winkel, the distributiecentrum,
+the laadperron. Each ends at a loading dock door behind a keycard; on the last one
+the pass is in De Bedrijfsleider's pocket, and he is not done with his shift.
+Health, armour, ammo and weapons carry across levels. Kills and the clock score
+the whole run.
 
 ## What's in it
 
@@ -45,18 +54,24 @@ dock door. Twenty-four things in the shop would rather you did not.
   baked, and they are why there is a shader at all — distance fog, which is what makes
   the far end of an aisle somewhere you have to walk to, and the freezer's failing
   strip lights, which flicker. Firing lights the aisle around you.
-- **Three enemies that want different things.** The winkelwagen charges the moment it
+- **Five enemies that want different things.** The winkelwagen charges the moment it
   sees you and does not stop. The vakkenvuller holds about seven metres, sidesteps, and
   lobs soup cans in an arc you can walk out of — real projectiles, stopped by shelves.
-  The zelfscanner barely moves, paints you with a targeting line for half a second, and
-  then burst-fires down the aisle: standing in the open is a decision, not an accident.
-- **The level.** Hand-authored as ASCII in `src/map.cpp` — checkouts, six gondola
-  aisles with sightlines down each, a freezer, and the back of house behind a locked
-  door. The keycard is in the far corner of the freezer, and there is a turret already
-  looking at the door you have to come through.
-- **Sound.** Synthesised in code at startup: the asset pack ships no audio and the spec
-  forbids fetching any. A dozen oscillator-and-noise sounds, plus a refrigeration hum.
-  Pickups play a barcode-scanner beep, because they had to.
+  The zelfscanner barely moves, paints you with a frozen targeting line for a full
+  second, then burst-fires down that line — step out of it and the burst misses. The
+  beveiliger is that mechanic on legs: he closes to mid range and takes aimed single
+  shots. De Bedrijfsleider, at the end, alternates between charging you down and
+  standing to hurl fans of soup cans; the last keycard drops where he does.
+- **Three levels.** Hand-authored as ASCII in `src/map.cpp`. The winkel: checkouts,
+  gondola aisles, a freezer with the keycard in its far corner and a turret already
+  looking at the door. The distributiecentrum: long parallel racking where every lane
+  is a firing line. The laadperron: cold cells and a steel tangle under the boss
+  arena. Loadout carries through each dock door; the geometry rebakes per level.
+- **Sound and music.** Synthesised in code at startup: the asset pack ships no audio
+  and the spec forbids fetching any. Two dozen oscillator-and-noise sounds — every
+  enemy barks once when it spots you — plus a refrigeration hum, and a tiny 16-step
+  sequencer that renders one bass-kick-hat loop per level (sparse, driving, fast) and
+  a title drone. `M` mutes the music and leaves the shop noises alone.
 
 ## Code
 
@@ -64,10 +79,10 @@ Ten small modules, no framework:
 
 | File | What it owns |
 |---|---|
-| `map.*` | Tiles, the hard-coded level, doors, line of sight, circle-vs-wall sliding |
-| `player.*` | Input, movement, both weapons, the keycard door |
-| `enemy.*` | The three behaviours, and the soup can |
-| `pickup.*` | The five pickups |
+| `map.*` | Tiles, the three hand-authored levels, doors, line of sight, sliding |
+| `player.*` | Input, movement, the four weapons, loadout carry-over, the keycard door |
+| `enemy.*` | The five behaviours, the soup can and the rocket |
+| `pickup.*` | The nine pickups |
 | `world.*` | The bag of everything, and the order things happen in a frame |
 | `render.*` | Meshes, shaders, billboards, the weapon sprite |
 | `hud.*` | Status bar, messages, title / death / victory screens |

@@ -14,12 +14,19 @@
 namespace {
 
 constexpr int kRate = 22050;
-constexpr int kSfxCount = (int)Sfx::Escaped + 1;
+constexpr int kSfxCount = (int)Sfx::CartRattle + 1;
+constexpr int kTrackCount = 4;   // title drone + one loop per level
 
 bool gReady = false;
 Sound gSounds[kSfxCount]{};
 Sound gHum{};
 float gHumTimer = 0.0f;
+
+Sound gMusic[kTrackCount]{};
+float gMusicLen[kTrackCount]{};
+float gMusicTimer = 0.0f;
+int gMusicTrack = -1;      // which Sound is looping right now; -1 = silence
+bool gMusicOn = true;
 
 unsigned int gNoise = 0x13579BDFu;
 
@@ -36,6 +43,35 @@ int Step(float t, float length, int count) {
 float Square(float phase) { return (phase - floorf(phase) < 0.5f) ? 1.0f : -1.0f; }
 float Saw(float phase) { return 2.0f * (phase - floorf(phase)) - 1.0f; }
 float Sine(float phase) { return sinf(phase * 2.0f * PI); }
+
+// --- music -------------------------------------------------------------------
+// Each track is a 16-step pattern (eighth notes) repeated for a few bars and
+// rendered once into a Sound of roughly 20-25 seconds; AudioUpdate loops it the
+// same way the hum loops, with the seam hidden in a baked edge fade.
+
+struct TrackDef {
+    float bpm;
+    int bars;               // repetitions of the 16-step pattern
+    const float* bass;      // [16] frequencies in Hz; 0 = rest
+    unsigned kicks;         // 16-step bitmask
+    unsigned hats;          // 16-step bitmask
+};
+
+//                                 A1              Bb1        A1              C2
+const float kBass1[16] = {55.00f, 0, 0, 0,  0, 0, 58.27f, 0,  55.00f, 0, 0, 0,  65.41f, 0, 0, 0};
+//                                 D2 dorik driving                G2      F2
+const float kBass2[16] = {73.42f, 0, 73.42f, 73.42f,  0, 73.42f, 0, 87.31f,
+                          73.42f, 0, 73.42f, 73.42f,  98.00f, 0, 87.31f, 0};
+//                                 E2 pumping                     B2       A2      G2
+const float kBass3[16] = {82.41f, 82.41f, 0, 82.41f,  82.41f, 0, 110.00f, 82.41f,
+                          82.41f, 0, 82.41f, 82.41f,  123.47f, 110.00f, 98.00f, 0};
+
+// Level 1 sparse dread, level 2 driving, level 3 fast.
+const TrackDef kTracks[3] = {
+    { 84.0f, 4, kBass1, (1u << 0) | (1u << 10), (1u << 4) | (1u << 12)},
+    {112.0f, 5, kBass2, 0x1111u, 0x4444u},
+    {140.0f, 7, kBass3, 0x5111u, 0xCCCCu},
+};
 
 // `fn` is called once per sample, in order, so it can carry its own phase.
 template <typename Fn>
@@ -56,6 +92,36 @@ Sound Render(float seconds, Fn fn) {
     const Sound sound = LoadSoundFromWave(wave);
     UnloadWave(wave);
     return sound;
+}
+
+Sound RenderTrack(const TrackDef& def, float* outLen) {
+    const float step = 60.0f / def.bpm * 0.5f;   // eighth notes
+    const float len = step * 16.0f * (float)def.bars;
+    *outLen = len;
+
+    return Render(len, [=, bph = 0.0f, kph = 0.0f](float t) mutable {
+        const int i = (int)(t / step);
+        const float local = t - (float)i * step;
+        const int s = i % 16;
+        float out = 0.0f;
+
+        if (def.bass[s] > 0.0f) {                 // square bass, plucked
+            bph += def.bass[s] / kRate;
+            out += Square(bph) * 0.30f * expf(-local * 2.5f);
+        }
+        if (def.kicks & (1u << s)) {              // a pitch-diving thump
+            kph += (120.0f * expf(-local * 16.0f) + 42.0f) / kRate;
+            out += Sine(kph) * 0.7f * expf(-local * 9.0f);
+        } else {
+            kph = 0.0f;
+        }
+        if (def.hats & (1u << s)) {               // noise hat
+            out += Noise() * 0.14f * expf(-local * 45.0f);
+        }
+
+        const float fade = fminf(1.0f, fminf(t, len - t) / 0.35f);
+        return out * fade;
+    });
 }
 
 }  // namespace
@@ -169,6 +235,101 @@ void AudioInit() {
         return Square(ph) * 0.28f * env;
     });
 
+    gSounds[(int)Sfx::Scattergun] = Render(0.32f, [lp = 0.0f, ph = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.35f;                        // a crate of glass, all at once
+        ph += (90.0f * expf(-t * 18.0f) + 48.0f) / kRate;
+        return (lp * 1.2f + Saw(ph) * 0.4f) * expf(-t * 11.0f) * 1.5f;
+    });
+
+    gSounds[(int)Sfx::RocketLaunch] = Render(0.5f, [lp = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * (0.08f + t * 0.5f);           // fuse, then whoosh
+        return lp * 2.2f * fminf(1.0f, t * 12.0f) * expf(-t * 4.5f);
+    });
+
+    gSounds[(int)Sfx::Explosion] = Render(0.9f, [lp = 0.0f, ph = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.12f;
+        ph += (120.0f * expf(-t * 3.0f) + 30.0f) / kRate;
+        return (lp * 1.6f + Sine(ph) * 0.6f) * expf(-t * 3.2f) * 1.4f;
+    });
+
+    gSounds[(int)Sfx::WeaponUp] = Render(0.45f, [ph = 0.0f](float t) mutable {
+        const float notes[3] = {659.0f, 880.0f, 1318.0f};
+        ph += notes[Step(t, 0.15f, 3)] / kRate;
+        return Square(ph) * 0.3f * expf(-fmodf(t, 0.15f) * 7.0f);
+    });
+
+    gSounds[(int)Sfx::WeaponSwitch] = Render(0.06f, [ph = 0.0f](float t) mutable {
+        ph += 300.0f / kRate;
+        return (Noise() * 0.4f + Square(ph) * 0.3f) * expf(-t * 70.0f);
+    });
+
+    gSounds[(int)Sfx::GuardShot] = Render(0.18f, [ph = 0.0f](float t) mutable {
+        const float f = 1400.0f * expf(-t * 30.0f) + 180.0f;
+        ph += f / kRate;
+        return (Square(ph) * 0.5f + Noise() * 0.4f) * expf(-t * 22.0f);
+    });
+
+    gSounds[(int)Sfx::DeathGuard] = Render(0.7f, [ph = 0.0f, lp = 0.0f](float t) mutable {
+        ph += fmaxf(50.0f, 130.0f - t * 90.0f) / kRate;
+        lp += (Noise() - lp) * 0.3f;
+        const float radio = (t < 0.25f) ? lp * 1.2f : 0.0f;   // the radio dies first
+        return radio + Saw(ph) * 0.5f * fminf(1.0f, t * 10.0f) * expf(-t * 3.5f);
+    });
+
+    gSounds[(int)Sfx::AlertBoss] = Render(0.8f, [ph = 0.0f, ph2 = 0.0f](float t) mutable {
+        ph += (70.0f + sinf(t * 30.0f) * 6.0f) / kRate;       // a bellow from the office
+        ph2 += 141.0f / kRate;
+        const float env = fminf(1.0f, t * 8.0f) * expf(-t * 2.2f);
+        return (Saw(ph) * 0.6f + Saw(ph2) * 0.25f + Noise() * 0.15f) * env * 1.2f;
+    });
+
+    gSounds[(int)Sfx::LevelDone] = Render(0.8f, [ph = 0.0f](float t) mutable {
+        const float notes[4] = {523.0f, 659.0f, 784.0f, 1046.0f};
+        ph += notes[Step(t, 0.13f, 4)] / kRate;
+        const float tail = (t > 0.52f) ? expf(-(t - 0.52f) * 4.0f) : 1.0f;
+        return Square(ph) * 0.3f * expf(-fmodf(t, 0.13f) * 7.0f) * tail;
+    });
+
+    gSounds[(int)Sfx::DeathBoss] = Render(1.4f, [ph = 0.0f, lp = 0.0f](float t) mutable {
+        ph += (100.0f * expf(-t * 1.8f) + 28.0f) / kRate;
+        lp += (Noise() - lp) * 0.1f;
+        float thud = 0.0f;                                    // he lands twice
+        for (const float hit : {0.55f, 0.8f}) {
+            if (t >= hit) thud += expf(-(t - hit) * 20.0f);
+        }
+        return Saw(ph) * 0.5f * expf(-t * 1.6f) + lp * 1.4f * thud;
+    });
+
+    gSounds[(int)Sfx::AlertCart] = Render(0.4f, [lp = 0.0f, ph = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.5f;                          // rattle plus wheel squeal
+        ph += (900.0f + sinf(t * 40.0f) * 250.0f) / kRate;
+        return (lp * 0.9f + Sine(ph) * 0.3f) * fminf(1.0f, t * 20.0f) * expf(-t * 6.0f);
+    });
+
+    gSounds[(int)Sfx::AlertStocker] = Render(0.6f, [ph = 0.0f](float t) mutable {
+        ph += (95.0f + sinf(t * 9.0f) * 10.0f) / kRate;       // a wet moan
+        return (Saw(ph) * 0.55f + Noise() * 0.1f) * fminf(1.0f, t * 8.0f) * expf(-t * 2.6f);
+    });
+
+    gSounds[(int)Sfx::AlertScanner] = Render(0.3f, [ph = 0.0f](float t) mutable {
+        ph += ((t < 0.15f) ? 880.0f : 1320.0f) / kRate;       // unexpected item
+        return Square(ph) * 0.35f * expf(-fmodf(t, 0.15f) * 12.0f);
+    });
+
+    gSounds[(int)Sfx::AlertGuard] = Render(0.45f, [ph = 0.0f, lp = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.4f;
+        const float squelch = (t < 0.08f) ? lp * 1.2f : 0.0f;   // the radio keys up
+        if (t >= 0.2f) ph += fmaxf(40.0f, 120.0f - (t - 0.2f) * 80.0f) / kRate;
+        const float grunt = (t >= 0.2f) ? Saw(ph) * 0.6f * expf(-(t - 0.2f) * 7.0f) : 0.0f;
+        return squelch + grunt;
+    });
+
+    gSounds[(int)Sfx::CartRattle] = Render(0.25f, [lp = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.6f;
+        const float gate = (fmodf(t, 0.06f) < 0.03f) ? 1.0f : 0.35f;
+        return lp * gate * expf(-t * 8.0f) * 0.9f;
+    });
+
     // The building itself: compressors, a strip light, the till that never sleeps.
     gHum = Render(3.6f, [a = 0.0f, b = 0.0f, lp = 0.0f](float t) mutable {
         a += 49.5f / kRate;
@@ -178,28 +339,69 @@ void AudioInit() {
         const float fade = fminf(1.0f, fminf(t, 3.6f - t) / 0.2f);
         return (Sine(a) * 0.5f + Sine(b) * 0.18f + lp * 2.2f) * breathe * fade;
     });
+
+    // The soundtrack: a near-static drone for the title, one loop per level.
+    constexpr float kTitleLen = 18.0f;
+    gMusicLen[0] = kTitleLen;
+    gMusic[0] = Render(kTitleLen, [a = 0.0f, b = 0.0f, lp = 0.0f](float t) mutable {
+        a += 55.0f / kRate;
+        b += 82.5f / kRate;                                   // a fifth up
+        lp += (Noise() - lp) * 0.01f;
+        const float swell = 0.6f + 0.4f * sinf(t * 0.35f);
+        const float fade = fminf(1.0f, fminf(t, kTitleLen - t) / 0.6f);
+        return (Saw(a) * 0.28f + Sine(b) * 0.16f + lp * 1.5f) * swell * fade;
+    });
+    for (int i = 0; i < 3; i++) {
+        gMusic[1 + i] = RenderTrack(kTracks[i], &gMusicLen[1 + i]);
+    }
 }
 
 void AudioShutdown() {
     if (!gReady) return;
     for (Sound& s : gSounds) UnloadSound(s);
+    for (Sound& s : gMusic) UnloadSound(s);
     UnloadSound(gHum);
     CloseAudioDevice();
 }
 
-void AudioUpdate(float dt, bool playing) {
+void AudioUpdate(float dt, bool playing, int level) {
     if (!gReady) return;
 
+    // The refrigeration: only while the shop floor is live.
     if (!playing) {
         gHumTimer = 0.0f;
-        return;
+    } else {
+        gHumTimer -= dt;
+        if (gHumTimer <= 0.0f) {
+            SetSoundVolume(gHum, 0.35f);
+            PlaySound(gHum);
+            gHumTimer = 3.4f;   // just short of the loop: the seam sits inside the fade
+        }
     }
-    gHumTimer -= dt;
-    if (gHumTimer <= 0.0f) {
-        SetSoundVolume(gHum, 0.35f);
-        PlaySound(gHum);
-        gHumTimer = 3.4f;   // just short of the loop, so the seam sits inside the fade
+
+    // The soundtrack: title drone or the current level's loop, quiet under the SFX.
+    int want = -1;
+    if (gMusicOn) {
+        want = (level < 0) ? 0 : 1 + ((level < 3) ? level : 2);
     }
+    if (want != gMusicTrack) {
+        if (gMusicTrack >= 0) StopSound(gMusic[gMusicTrack]);
+        gMusicTrack = want;
+        gMusicTimer = 0.0f;
+    }
+    if (gMusicTrack >= 0) {
+        gMusicTimer -= dt;
+        if (gMusicTimer <= 0.0f) {
+            SetSoundVolume(gMusic[gMusicTrack], 0.25f);
+            PlaySound(gMusic[gMusicTrack]);
+            gMusicTimer = gMusicLen[gMusicTrack] - 0.2f;
+        }
+    }
+}
+
+bool AudioToggleMusic() {
+    gMusicOn = !gMusicOn;
+    return gMusicOn;
 }
 
 void PlaySfx(Sfx id, float volume) {
