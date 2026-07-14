@@ -43,9 +43,12 @@ void GameUpdate(Game& g, float dt) {
 
     switch (g.state) {
         case GameState::Title: {
-            // Esc is not "any key": on the web it just brought us here.
+            // Esc is not "any key": on the web it just brought us here. Neither is
+            // M — the title advertises it as the music toggle, and it already did
+            // that above.
             const int key = GetKeyPressed();
-            if ((key != 0 && key != KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if ((key != 0 && key != KEY_ESCAPE && key != KEY_M) ||
+                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 Restart(g);
             }
             break;
