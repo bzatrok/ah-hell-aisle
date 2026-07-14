@@ -628,6 +628,10 @@ void EnemyHurt(World& w, Enemy& e, int damage) {
 void AlertEnemies(World& w, Vector2 from, float radius) {
     for (Enemy& e : w.enemies) {
         if (e.state != EnemyState::Idle) continue;
-        if (Vector2Distance(e.pos, from) < radius) e.state = EnemyState::Chase;
+        if (Vector2Distance(e.pos, from) >= radius) continue;
+        e.state = EnemyState::Chase;
+        // Noise wakes quietly — a whole aisle stirring to one gunshot should not
+        // be a choir — but the boss's entrance is scripted whatever woke him.
+        if (e.kind == EnemyKind::Bedrijfsleider) BossIntro(w, e);
     }
 }
