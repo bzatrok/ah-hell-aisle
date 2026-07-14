@@ -207,7 +207,11 @@ static void FireVuurwerkpijl(World& w) {
     Projectile r;
     r.kind = Projectile::Kind::Rocket;
     r.ownerIsPlayer = true;
+    // The muzzle sits 0.43 ahead of you — inside the shelf if you fire with your
+    // nose against one. Detonating from a solid tile can see nothing, so the blast
+    // would be a dud; launch from where you stand instead and let it hit the wall.
     r.pos = Vector2Add(p.pos, Vector2Scale(fwd, kPlayerRadius + 0.15f));
+    if (w.map.SolidAt(r.pos)) r.pos = p.pos;
     r.vel = Vector2Scale(fwd, kRocketSpeed);
     r.height = kRocketLaunchH;
     r.life = 5.0f;
