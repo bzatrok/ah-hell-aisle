@@ -4,6 +4,7 @@
 
 #include "audio.h"
 #include "raymath.h"
+#include "web_input.h"
 #include "world.h"
 
 static float WeaponAnimTotal(WeaponId id) {
@@ -103,7 +104,7 @@ static void UpdateDoors(World& w, float dt) {
         TryOpen(w, *touched);
     }
 
-    if (IsKeyPressed(KEY_E)) {
+    if (IsKeyPressed(KEY_E) || WebConsumeUsePressed()) {
         if (Door* used = DoorNear(w, 1.8f, true)) {
             TryOpen(w, *used);
         }
@@ -237,11 +238,25 @@ static void UpdateWeapon(World& w, float dt) {
     if (IsKeyPressed(KEY_THREE)) SelectWeapon(p, WeaponId::Statiegeldkanon);
     if (IsKeyPressed(KEY_FOUR)) SelectWeapon(p, WeaponId::Vuurwerkpijl);
 
+    // A swipe steps to the next/previous slot you actually own, wrapping around.
+    if (int step = WebConsumeWeaponStep()) {
+        int slot = (int)p.weapon;
+        for (int i = 0; i < kWeaponCount; ++i) {   // at most one full lap
+            slot = ((slot + step) % kWeaponCount + kWeaponCount) % kWeaponCount;
+            if (p.hasWeapon[slot]) {
+                SelectWeapon(p, (WeaponId)slot);
+                break;
+            }
+        }
+    }
+
     p.fireCooldown = fmaxf(0.0f, p.fireCooldown - dt);
     p.fireAnim = fmaxf(0.0f, p.fireAnim - dt);
 
+    // firePressed is an edge that survives a faster-than-one-frame tap.
     const bool firing = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
-                        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+                        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) ||
+                        gWebInput.fireDown || WebConsumeFirePressed();
     if (!firing || p.fireCooldown > 0.0f) return;
 
     if (p.weapon == WeaponId::Stokbrood) {
@@ -300,7 +315,10 @@ static bool WalkableForPlayer(const World& w, Vector2 from, Vector2 to) {
 static void UpdateMovement(World& w, float dt) {
     Player& p = w.player;
 
-    p.yaw += GetMouseDelta().x * kMouseSens;
+    // On touch devices raylib maps a dragging finger onto the mouse, so mouse-look
+    // would double-steer on top of the injected tilt/drag input.
+    if (!gWebInput.touchMode) p.yaw += GetMouseDelta().x * kMouseSens;
+    p.yaw += gWebInput.turnRate * dt + WebConsumeYawDelta();
     if (IsKeyDown(KEY_LEFT)) p.yaw -= kTurnSpeed * dt;
     if (IsKeyDown(KEY_RIGHT)) p.yaw += kTurnSpeed * dt;
 
@@ -309,10 +327,15 @@ static void UpdateMovement(World& w, float dt) {
     if (IsKeyDown(KEY_S)) wish = Vector2Subtract(wish, p.forward());
     if (IsKeyDown(KEY_D)) wish = Vector2Add(wish, p.right());
     if (IsKeyDown(KEY_A)) wish = Vector2Subtract(wish, p.right());
+    wish = Vector2Add(wish, Vector2Scale(p.forward(), gWebInput.moveY));
+    wish = Vector2Add(wish, Vector2Scale(p.right(), gWebInput.moveX));
 
     const bool moving = Vector2Length(wish) > 0.01f;
     if (moving) {
-        const Vector2 step = Vector2Scale(Vector2Normalize(wish), kMoveSpeed * dt);
+        // The virtual stick is analog: a half-tilted stick walks at half speed,
+        // while the keys keep their full normalised pace.
+        const float strength = fminf(1.0f, Vector2Length(wish));
+        const Vector2 step = Vector2Scale(Vector2Normalize(wish), kMoveSpeed * dt * strength);
 
         // Walls and bodies both stop you, one axis at a time so you slide along either.
         // A blocked axis never rejects a move that increases the gap, so nothing can

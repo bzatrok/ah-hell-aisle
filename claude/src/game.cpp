@@ -4,6 +4,7 @@
 #include "hud.h"
 #include "raylib.h"
 #include "render.h"
+#include "web_input.h"
 
 namespace {
 
@@ -48,7 +49,7 @@ void GameUpdate(Game& g, float dt) {
             // that above.
             const int key = GetKeyPressed();
             if ((key != 0 && key != KEY_ESCAPE && key != KEY_M) ||
-                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || WebConsumeFirePressed()) {
                 Restart(g);
             }
             break;
@@ -77,7 +78,7 @@ void GameUpdate(Game& g, float dt) {
         case GameState::Dead:
             // The shop carries on without you. It just does not take your input.
             WorldUpdate(g.world, dt);
-            if (IsKeyPressed(KEY_R)) {
+            if (IsKeyPressed(KEY_R) || WebConsumeFirePressed()) {
                 // The current level again, with what you walked in carrying.
                 WorldRestartLevel(g.world);
                 RenderRebuild(g.world.map);
@@ -87,7 +88,8 @@ void GameUpdate(Game& g, float dt) {
             break;
 
         case GameState::Escaped:
-            if (IsKeyPressed(KEY_R)) Restart(g);   // a victory lap starts over
+            // A tap restarts too, same as the Dead screen.
+            if (IsKeyPressed(KEY_R) || WebConsumeFirePressed()) Restart(g);
             break;
     }
 }
