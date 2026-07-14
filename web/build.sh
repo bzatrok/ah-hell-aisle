@@ -47,7 +47,12 @@ em++ -std=c++17 -O2 claude/src/*.cpp \
   -o "$DIST/game.js"
 # Version-stamp the shell page: index.html's BUILD appends ?v= to every asset
 # URL, so Safari's stubbornly cached game.js/.wasm/.data get refetched per build.
+# A dirty tree gets a timestamp too — consecutive dirty builds would otherwise
+# share one id and Safari would serve the previous build against a phone again.
 BUILD_ID="$(git describe --always --dirty 2>/dev/null || echo dev)"
+case "$BUILD_ID" in
+  *-dirty|dev) BUILD_ID="$BUILD_ID.$(date +%s)" ;;
+esac
 sed "s/__BUILD_ID__/$BUILD_ID/g" web/index.html > "$DIST/index.html"
 
 echo "Build complete:"
