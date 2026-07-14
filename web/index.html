@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AH: Hell Aisle — claude</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #ddd;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  body { display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; }
+  .frame { position: relative; width: min(1280px, 100vw); aspect-ratio: 16 / 9; }
+  canvas { width: 100%; height: 100%; display: block; max-width: 100%;
+    image-rendering: pixelated; background: #000; }
+  #start { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: rgba(0, 0, 0, 0.85); cursor: pointer;
+    font-size: 1.4rem; letter-spacing: 0.05em; user-select: none; }
+  .hint { font-size: 0.85rem; color: #888; }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <canvas id="canvas" width="1280" height="720" tabindex="0"></canvas>
+    <div id="start">&#9654; click to start</div>
+  </div>
+  <p class="hint">Esc quits the run &mdash; refresh the page to restart.</p>
+  <script>
+    document.getElementById('start').addEventListener('click', function () {
+      this.remove();
+      var canvas = document.getElementById('canvas');
+      window.Module = { canvas: canvas };
+      var engine = document.createElement('script');
+      engine.src = 'game.js';
+      document.body.appendChild(engine);
+      canvas.focus();
+    }, { once: true });
+  </script>
+</body>
+</html>
