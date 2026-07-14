@@ -253,8 +253,11 @@ static void UpdateWeapon(World& w, float dt) {
     p.fireCooldown = fmaxf(0.0f, p.fireCooldown - dt);
     p.fireAnim = fmaxf(0.0f, p.fireAnim - dt);
 
-    // firePressed is an edge that survives a faster-than-one-frame tap.
-    const bool firing = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
+    // firePressed is an edge that survives a faster-than-one-frame tap. The mouse
+    // button gates off in touchMode: raylib counts any touch as left-button down
+    // (rcore.c "touches are considered like mouse buttons"), which would turn the
+    // movement stick into a trigger.
+    const bool firing = (!gWebInput.touchMode && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) ||
                         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) ||
                         gWebInput.fireDown || WebConsumeFirePressed();
     if (!firing || p.fireCooldown > 0.0f) return;
