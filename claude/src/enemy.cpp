@@ -13,7 +13,7 @@
 static const EnemyStats kStats[3] = {
     {  30,  4.0f,  0.30f,  18.0f,   0.95f,  1.0f,  10,  1.00f },  // Winkelwagen: the rusher
     {  60,  1.8f,  0.30f,  16.0f,  10.00f,  2.0f,  15,  1.35f },  // Vakkenvuller: the zoner
-    { 100,  0.4f,  0.36f,  15.0f,  14.00f,  1.5f,   8,  1.30f },  // Zelfscanner:  the turret
+    { 100,  0.4f,  0.36f,  15.0f,  14.00f,  1.5f,   5,  1.30f },  // Zelfscanner:  the turret
 };
 
 const EnemyStats& StatsFor(EnemyKind kind) { return kStats[(int)kind]; }
@@ -86,6 +86,21 @@ static void EndAttack(Enemy& e) {
     e.stateTimer = 0.0f;
     e.cooldown = StatsFor(e.kind).cooldown;
     e.aimBeam = 0.0f;
+}
+
+// The frozen-ray shot. Aim locks when the attack starts, so during the windup the
+// telegraphed line stays put and stepping out of it is a real dodge. The shot then
+// tests the player against a corridor around that ray, not their live position.
+static void FreezeAim(const World& w, Enemy& e) {
+    e.aimDir = Vector2Normalize(Vector2Subtract(w.player.pos, e.pos));
+}
+
+static bool FrozenRayHits(const World& w, const Enemy& e, float range) {
+    const Vector2 to = Vector2Subtract(w.player.pos, e.pos);
+    const float along = Vector2DotProduct(to, e.aimDir);
+    const float perp2 = Vector2DotProduct(to, to) - along * along;
+    const float halfW = kPlayerRadius + 0.12f;
+    return along > 0.0f && along <= range && perp2 <= halfW * halfW;
 }
 
 // --- the rusher --------------------------------------------------------------
@@ -199,7 +214,7 @@ static void UpdateVakkenvuller(World& w, Enemy& e, float dist, bool los, float d
 
 static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt) {
     const EnemyStats& s = StatsFor(e.kind);
-    constexpr float kWindup = 0.45f;
+    constexpr float kWindup = 1.0f;
 
     switch (e.state) {
         case EnemyState::Idle:
@@ -209,6 +224,7 @@ static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt
         case EnemyState::Chase:
             if (los && dist < s.attackRange && e.cooldown <= 0.0f && !w.player.dead()) {
                 BeginAttack(e, 3);
+                FreezeAim(w, e);
                 break;
             }
             if (dist > 7.0f) Step(w, e, Vector2Subtract(w.player.pos, e.pos), dt);
@@ -234,7 +250,10 @@ static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt
                 e.shotsLeft--;
                 e.shotTimer = 0.14f;
                 e.beam = 0.09f;
-                PlayerDamage(w, s.damage);
+                // A miss is still loud: the beam and the shriek fire either way.
+                if (los && FrozenRayHits(w, e, s.attackRange + 1.0f)) {
+                    PlayerDamage(w, s.damage);
+                }
                 PlaySfxAt(Sfx::EnemyShoot, dist);
             }
             if (e.shotsLeft <= 0 && e.shotTimer <= 0.0f) EndAttack(e);

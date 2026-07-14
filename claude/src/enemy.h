@@ -39,6 +39,7 @@ struct Enemy {
     float strafeTimer = 0.0f;
     int shotsLeft = 0;     // hits still owed by the attack in progress
     float shotTimer = 0.0f;
+    Vector2 aimDir{};      // frozen at attack start — the dodgeable-beam mechanic
     float beam = 0.0f;     // >0 while its beam is drawn
     float aimBeam = 0.0f;  // >0 while it is winding up: the telegraph you can dodge
 

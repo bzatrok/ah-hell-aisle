@@ -336,22 +336,29 @@ void CollectSprites(const World& w, Vector3 eye, std::vector<Billboard>& out) {
     }
 }
 
-// The zelfscanner's beam: a thin line while it is choosing you, a fat one while it is
-// shooting you. Both are stopped by shelves because the depth buffer says so.
-void DrawBeams(const World& w, Vector3 eye) {
+// The turret's beam: a thin line while it is choosing you, a fat one while it is
+// shooting you. Both run along the frozen aim, not to the live player — the
+// telegraph is the actual line you have to leave.
+void DrawBeams(const World& w) {
     for (const Enemy& e : w.enemies) {
         if (!e.alive()) continue;
+        if (e.beam <= 0.0f && e.aimBeam <= 0.0f) continue;
+
+        const float len =
+            w.map.RayToWall(e.pos, e.aimDir, StatsFor(e.kind).attackRange + 1.0f);
         const Vector3 muzzle = {e.pos.x, 0.95f, e.pos.y};
+        const Vector3 end = {e.pos.x + e.aimDir.x * len, kEyeH,
+                             e.pos.y + e.aimDir.y * len};
 
         if (e.beam > 0.0f) {
             for (int i = 0; i < 3; i++) {
                 const float o = (i - 1) * 0.012f;
                 DrawLine3D({muzzle.x, muzzle.y + o, muzzle.z},
-                           {eye.x, eye.y + o - 0.05f, eye.z},
+                           {end.x, end.y + o, end.z},
                            Color{255, 90, 60, 255});
             }
-        } else if (e.aimBeam > 0.0f) {
-            DrawLine3D(muzzle, {eye.x, eye.y - 0.05f, eye.z}, Color{220, 40, 30, 110});
+        } else {
+            DrawLine3D(muzzle, end, Color{220, 40, 30, 110});
         }
     }
 }
@@ -478,7 +485,7 @@ void RenderScene(const World& w, float dt) {
         DrawMesh(dm.mesh, dm.material, MatrixTranslate(0.0f, lift, 0.0f));
     }
 
-    DrawBeams(w, cam.position);
+    DrawBeams(w);
 
     // Back to front. The cutout shader means the depth buffer would sort them anyway,
     // but drawing far-to-near keeps the soft edges of the art honest.
