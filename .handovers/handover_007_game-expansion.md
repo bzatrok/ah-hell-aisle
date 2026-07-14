@@ -1,6 +1,6 @@
 # Handover 007 — Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music
 
-**Branch:** tasks A–C directly on `main` (small fixes); tasks D–J on a new `feature/expansion` branch, merged to `main` when the acceptance checklist passes.
+**Branch:** tasks A–C directly on `master` (small fixes; the repo branch was renamed `main` → `master` on 2026-07-14); tasks D–J on a new `feature/expansion` branch, merged to `master` when the acceptance checklist passes.
 **Author:** session 2026-07-14 (the session that built the web harness, handover 006)  ·  **Status:** pending
 **Scope:** the bake-off is decided — `claude/` won and is unlocked (commit `2434451`). This handover turns the winning entry into a bigger game: fix the undodgeable self-checkout turret, fix Esc on the web build, add two weapons, two enemies, two more levels with rising difficulty, and give everything a voice (SFX + procedural music). Builds on handover 006 (`web/` WASM harness, commits `6b20f7c`, `1e11da5`).
 
@@ -26,6 +26,7 @@ The game is compact (~2.4k lines, C++17 + raylib 6.0) and rigorously data-driven
 | Game states | `claude/src/game.cpp`, `game.h` (`Title/Playing/Dead/Escaped`) |
 | One-time geometry bake | `claude/src/main.cpp:19` (`RenderInit` — called once, comment says level never changes: task H changes this) |
 | Web build | `web/build.sh` (shader sed at `:38`, link flags `:48-58` — **keep `-sGROWABLE_ARRAYBUFFERS=0`**, it fixes a Chrome WebGL bug), shell page `web/index.html` |
+| Mobile input shim (only if handover 008 has run first) | `claude/src/web_input.h/.cpp` — browser-injected touch/tilt input; `web/index.html` then also carries the touch JS layer |
 | Art generator + manifest | `tools/gen_assets.py`, `assets/MANIFEST.md` — read both before task E |
 
 Build & run:
@@ -109,13 +110,17 @@ raylib's web platform never returns `true` from `WindowShouldClose()` (its web m
         }
 ```
 
+> **008 interop:** if handover 008 (mobile controls) has run first, the Title/Dead/Escaped
+> conditions already carry a `WebConsumeFirePressed()` term (tap-to-restart) — preserve it
+> when applying this rewrite, i.e. append `|| WebConsumeFirePressed()` to the condition above.
+
 `claude/src/main.cpp:21`: comment becomes `// Esc quits on desktop; on web it returns to the title (game.cpp)`.
-`web/index.html:27`: hint becomes `Esc releases the mouse &mdash; Esc again returns to the title screen.`
+`web/index.html`: the desktop hint line ("Esc quits the run…") becomes `Esc releases the mouse &mdash; Esc again returns to the title screen.` (after 008 the page has mobile/desktop hint variants — change only the desktop one).
 
 **Files:** `game.cpp` · `main.cpp` · `web/index.html`
 **Test (web):** start a run, press Esc (twice if mouse captured) → title screen; any other key starts a fresh run; Esc on the title does nothing.
 
-> **Checkpoint after A–C:** commit each task separately on `main`, run `./web/build.sh`, verify locally (script in the acceptance section), then ask Ben to deploy — the deploy command needs his approval/terminal: `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle`. Then branch `feature/expansion` for the rest.
+> **Checkpoint after A–C:** commit each task separately on `master`, run `./web/build.sh`, verify locally (script in the acceptance section), then ask Ben to deploy — the deploy command needs his approval/terminal: `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle`. Then branch `feature/expansion` for the rest.
 
 ## D — Upstream the web shaders, drop the sed  *(DECIDED)*
 
@@ -157,7 +162,7 @@ Slots 3 and 4, following the slot-1/2 patterns in `player.cpp` end to end (coold
 | Acquired via | `g` map pickup → weapon + 12 flessen | `p` map pickup → weapon + 4 vuurwerk |
 
 Implementation notes (all decided):
-- `WeaponId` grows to 4; `Player` gets `bool hasWeapon[4]` (slots 1-2 true from start) and per-type ammo (labels stays, add flessen + vuurwerk); keys `KEY_THREE`/`KEY_FOUR` select only if owned; add a `WeaponSwitch` click sound on any successful switch.
+- `WeaponId` grows to 4; `Player` gets `bool hasWeapon[4]` (slots 1-2 true from start) and per-type ammo (labels stays, add flessen + vuurwerk); keys `KEY_THREE`/`KEY_FOUR` select only if owned; add a `WeaponSwitch` click sound on any successful switch. If handover 008 has run first, `UpdateWeapon` contains a `WebConsumeWeaponStep()` cycle over a `kWeaponCount = 2` constant (swipe weapon switching) — replace it with "step to the next/previous **owned** slot, wrapping", so mobile swipes respect ownership.
 - `Projectile` gains `enum kind {SoupCan, Rocket}` + an `ownerIsPlayer` flag; `ProjectilesUpdate` explodes rockets on wall/enemy/lifetime: apply radial damage to enemies via `EnemyHurt` and to the player via `PlayerDamage`, add `w.shake`, spawn the `Explosion` sound and a brief flash (a scaled billboard or the muzzle-flash tint — executor's call, it's cosmetic).
 - Weapon pickups spawn like other pickups (`world.cpp` switch) but set `hasWeapon` + grant ammo + auto-select + `WeaponUp` fanfare; picking up an owned weapon just grants the ammo.
 - HUD `AMMO` shows the **selected** weapon's reserve; `-` for the stokbrood.
@@ -208,11 +213,11 @@ All synthesised via the existing `Render(seconds, fn)`; extend the `Sfx` enum wi
 ## J — Docs, verify, ship
 
 - Update `claude/README.md`: new controls (3/4, M), the three levels, the two new enemies/weapons, web build pointer.
-- Full acceptance below; merge `feature/expansion` → `main`; rebuild `./web/build.sh`; ask Ben to deploy (command at checkpoint above — it requires his approval).
+- Full acceptance below; merge `feature/expansion` → `master`; rebuild `./web/build.sh`; ask Ben to deploy (command at checkpoint above — it requires his approval).
 
 ## Sequencing
 
-1. **A** kassa fix → 2. **B** ammo → 3. **C** web Esc — each committed on `main`; checkpoint: web rebuild + Ben deploys.
+1. **A** kassa fix → 2. **B** ammo → 3. **C** web Esc — each committed on `master`; checkpoint: web rebuild + Ben deploys.
 4. Branch `feature/expansion`: **D** shaders → **E** art → **F** weapons → **G** enemies → **H** levels → **I** audio/music → **J** docs+verify+merge. E must precede F/G (they load the sprites). Commit small; F/G/H are cross-cutting — split into compiling sub-commits.
 
 ## Decisions — locked ✅
