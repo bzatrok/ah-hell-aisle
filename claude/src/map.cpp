@@ -5,7 +5,7 @@
 #include "raymath.h"
 
 // ---------------------------------------------------------------------------
-// The level, hand-authored. One character per tile, 40x40.
+// The three levels, hand-authored. One character per tile, 40x40 each.
 //
 //   #  perimeter wall      C  checkout lane      S  stocked gondola
 //   s  picked-clean gondola  F  freezer          M  magazijn (back of house)
@@ -15,12 +15,13 @@
 //   a  appelflap  r  rookworst  l  labels  b  bonuskaart  k  the keycard
 //   f  flessen (ammo 3)  v  vuurwerk (ammo 4)  g  statiegeldkanon  p  vuurwerkpijl
 //
-// Read it north-up: the magazijn is the strip along the top, behind the locked
-// door at column 19. You start at the bottom, in front of the checkouts. The
-// keycard sits in the far corner of the freezer, which is the one room in the
-// store with a turret already looking at the door you have to come through.
+// Level 1, the store. Read it north-up: the magazijn is the strip along the
+// top, behind the locked door at column 19. You start at the bottom, in front
+// of the checkouts. The keycard sits in the far corner of the freezer, which is
+// the one room with a turret already looking at the door you have to come
+// through.
 // ---------------------------------------------------------------------------
-static const char* const kLevel[Map::H] = {
+static const char* const kLevel1[Map::H] = {
     "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMXMMMMMM",
     "M................3................l....M",
     "M..MM...MM...MM.....3...MM...MM........M",
@@ -63,6 +64,103 @@ static const char* const kLevel[Map::H] = {
     "########################################",
 };
 
+// ---------------------------------------------------------------------------
+// Level 2, "Het Distributiecentrum". Long parallel racking with a single wide
+// centre aisle: every lane is a firing line, and the beveiligers know it. The
+// keycard waits in the vriescel in the far corner; the dock bay behind the
+// keycard door at the top is the way out.
+// ---------------------------------------------------------------------------
+static const char* const kLevel2[Map::H] = {
+    "MMMMMMMMMMMMMMMMMMMMXMMMMMMMMMMMMMMMMMMM",
+    "M...4................a...............v.M",
+    "M.r..........................4.........M",
+    "M......................................M",
+    "MMMMMMMMMMKMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+    "M......................................M",
+    "M.1...............3................1...M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M....................4.................M",
+    "M.l.......2..................f.........M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M...............1......1...............M",
+    "M.4...........a...............2......l.M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M......3...............................M",
+    "M..............1......f.........4......M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M......................................M",
+    "M.b.........2.................1........M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M...........................3..........M",
+    "M...1...............p..................M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M..................4...................M",
+    "M.r.......1....................2.....a.M",
+    "M..MMMMMMMMMMMMMM......MMMMMMMMMMMMMM..M",
+    "M......................................M",
+    "M.2..........1.........................M",
+    "M...........................FFF..FFFFFFM",
+    "M.....s.....................F..........M",
+    "M.1...............2.........F......3...M",
+    "M...........................F..........M",
+    "M....ss.....................F.......4..M",
+    "M..2........................F..........M",
+    "M...........................F....3.....M",
+    "M.....S..1......S...........F..........M",
+    "M.....S.........S...........F..........M",
+    "M..@........................F.3......k.M",
+    "M.r.........................F.........bM",
+    "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+};
+
+// ---------------------------------------------------------------------------
+// Level 3, "Het Laadperron". Cold cells at the bottom, a tight freezer/steel
+// tangle in the middle, and the boss arena in front of the final dock. There is
+// no keycard on the floor this time: De Bedrijfsleider carries it.
+// ---------------------------------------------------------------------------
+static const char* const kLevel3[Map::H] = {
+    "MMMMMMMMMMMMMMMMMMMXMMMMMMMMMMMMMMMMMMMM",
+    "M..............r..........a............M",
+    "M......................................M",
+    "MMMMMMMMMMMMMMMMMMMKMMMMMMMMMMMMMMMMMMMM",
+    "M....4...........3..............4......M",
+    "M...MM..............................MM.M",
+    "M.....1..........................1.....M",
+    "M..................5...................M",
+    "M.4................................4...M",
+    "M...MM..............................MM.M",
+    "M..........f...............v...........M",
+    "M......2....................2..........M",
+    "MMMMMMMMM....MMMMMMMMMMMMMM....MMMMMMMMM",
+    "M....3.............................3...M",
+    "M..FF..FFFFFF..MMMM..MMMM..FFFFFF..FF..M",
+    "M.1..............2.............4.......M",
+    "M..FF..FFFFFF..MMMM..MMMM..FFFFFF..FF..M",
+    "M......4..........1..............2.....M",
+    "M..FF..FFFFFF..MMMM..MMMM..FFFFFF..FF..M",
+    "M...l.............v.................l..M",
+    "M..FF..FFFFFF..MMMM..MMMM..FFFFFF..FF..M",
+    "M.2.............1...............1......M",
+    "M..FF..FFFFFF..MMMM..MMMM..FFFFFF..FF..M",
+    "M........3.....................3.......M",
+    "M..FF..FFFFFF..MMMM..MMMM..FFFFFF..FF..M",
+    "M....a...........b..............r......M",
+    "MMMMMMM....MMMMMMMMMM....MMMMMMMMMMMMMMM",
+    "M........1...................1.........M",
+    "M..4..............3...............4....M",
+    "M..FFFF..FFFF..FFFF..FFFF..FFFF..FFFF..M",
+    "M....2.........1..........2............M",
+    "M..FFFF..FFFF..FFFF..FFFF..FFFF..FFFF..M",
+    "M.l...........a.............1........b.M",
+    "M..FFFF..FFFF..FFFF..FFFF..FFFF..FFFF..M",
+    "M......1..........2..............1.....M",
+    "M.....2..........4...............2.....M",
+    "M...ss................3...........ss...M",
+    "M.r................................f...M",
+    "M..................@...................M",
+    "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+};
+
 static Tile TileFor(char c) {
     switch (c) {
         case '#': return Tile::Plain;
@@ -77,23 +175,56 @@ static Tile TileFor(char c) {
     }
 }
 
-// The zones the level was drawn in. Keep in step with the ASCII above.
-static Zone ZoneFor(int x, int y) {
+// The zones each level was drawn in. Keep in step with the ASCII above.
+static Zone ZoneFor1(int x, int y) {
     if (y <= 8) return Zone::Magazijn;
     if (y >= 33) return Zone::Checkout;
     if (x >= 27 && y >= 11 && y <= 25) return Zone::Freezer;
     return Zone::Store;
 }
 
-Map LoadLevel(std::vector<Spawn>& spawns) {
+static Zone ZoneFor2(int x, int y) {
+    if (y <= 4) return Zone::Store;                  // the dock bay, lights left on
+    if (x >= 28 && y >= 28) return Zone::Freezer;    // the vriescel
+    return Zone::Magazijn;
+}
+
+static Zone ZoneFor3(int /*x*/, int y) {
+    if (y <= 12) return Zone::Magazijn;              // arena and the final dock
+    if (y >= 27) return Zone::Freezer;               // the cold cells you start in
+    return Zone::Store;
+}
+
+struct LevelDef {
+    const char* const* rows;          // [Map::H]
+    Zone (*zoneFor)(int x, int y);
+    const char* intro;                // HUD message on entry
+};
+
+static const LevelDef kLevels[kLevelCount] = {
+    {kLevel1, ZoneFor1, "02:14 - DE WINKEL IS GESLOTEN"},
+    {kLevel2, ZoneFor2, "02:47 - HET DISTRIBUTIECENTRUM"},
+    {kLevel3, ZoneFor3, "03:33 - HET LAADPERRON. HIJ WACHT."},
+};
+
+static int ClampLevel(int level) {
+    return (level < 0) ? 0 : (level >= kLevelCount ? kLevelCount - 1 : level);
+}
+
+const char* LevelIntro(int level) {
+    return kLevels[ClampLevel(level)].intro;
+}
+
+Map LoadLevel(int level, std::vector<Spawn>& spawns) {
+    const LevelDef& def = kLevels[ClampLevel(level)];
     Map m;
     spawns.clear();
 
     for (int y = 0; y < Map::H; y++) {
         for (int x = 0; x < Map::W; x++) {
-            const char c = kLevel[y][x];
+            const char c = def.rows[y][x];
             m.tiles[y][x] = TileFor(c);
-            m.zones[y][x] = ZoneFor(x, y);
+            m.zones[y][x] = def.zoneFor(x, y);
 
             if (m.tiles[y][x] == Tile::DoorKeycard || m.tiles[y][x] == Tile::DoorExit) {
                 m.doors.push_back({x, y, m.tiles[y][x] == Tile::DoorExit, false, 0.0f});

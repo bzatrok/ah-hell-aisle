@@ -8,7 +8,8 @@
 namespace {
 
 void Restart(Game& g) {
-    WorldInit(g.world);
+    WorldStartRun(g.world);
+    RenderRebuild(g.world.map);
     g.state = GameState::Playing;
     DisableCursor();
 }
@@ -16,7 +17,7 @@ void Restart(Game& g) {
 }  // namespace
 
 void GameInit(Game& g) {
-    WorldInit(g.world);          // so the title screen has a world to hold
+    WorldStartRun(g.world);      // so the title screen has a world to hold
     g.state = GameState::Title;
     EnableCursor();
 }
@@ -49,9 +50,16 @@ void GameUpdate(Game& g, float dt) {
             WorldUpdate(g.world, dt);
 
             if (g.world.escaped) {
-                g.state = GameState::Escaped;
-                EnableCursor();
-                PlaySfx(Sfx::Escaped);
+                if (g.world.level + 1 < kLevelCount) {
+                    // Through the dock door, into the next building.
+                    WorldNextLevel(g.world);
+                    RenderRebuild(g.world.map);
+                    PlaySfx(Sfx::LevelDone);
+                } else {
+                    g.state = GameState::Escaped;
+                    EnableCursor();
+                    PlaySfx(Sfx::Escaped);
+                }
             } else if (g.world.player.dead()) {
                 g.state = GameState::Dead;
                 EnableCursor();
@@ -61,11 +69,17 @@ void GameUpdate(Game& g, float dt) {
         case GameState::Dead:
             // The shop carries on without you. It just does not take your input.
             WorldUpdate(g.world, dt);
-            if (IsKeyPressed(KEY_R)) Restart(g);
+            if (IsKeyPressed(KEY_R)) {
+                // The current level again, with what you walked in carrying.
+                WorldRestartLevel(g.world);
+                RenderRebuild(g.world.map);
+                g.state = GameState::Playing;
+                DisableCursor();
+            }
             break;
 
         case GameState::Escaped:
-            if (IsKeyPressed(KEY_R)) Restart(g);
+            if (IsKeyPressed(KEY_R)) Restart(g);   // a victory lap starts over
             break;
     }
 }

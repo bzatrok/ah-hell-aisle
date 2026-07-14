@@ -8,11 +8,22 @@ void World::Message(std::string text) {
     if (messages.size() > 4) messages.erase(messages.begin());
 }
 
-void WorldInit(World& w) {
-    w = World{};
+// Rebuilds map and entities for w.level. The player keeps their loadout but
+// nothing else: keycard, flashes and momentum all reset with the room.
+static void LoadCurrentLevel(World& w) {
+    w.enemies.clear();
+    w.pickups.clear();
+    w.projectiles.clear();
+    w.messages.clear();
+    w.escaped = false;
+    w.shake = 0.0f;
+
+    Player fresh;
+    ApplyLoadout(fresh, CaptureLoadout(w.player));
+    w.player = fresh;
 
     std::vector<Spawn> spawns;
-    w.map = LoadLevel(spawns);
+    w.map = LoadLevel(w.level, spawns);
 
     for (const Spawn& s : spawns) {
         const Vector2 centre = {s.x + 0.5f, s.y + 0.5f};
@@ -46,8 +57,35 @@ void WorldInit(World& w) {
         phase += 1.1f;
     }
 
-    w.totalEnemies = (int)w.enemies.size();
-    w.Message("02:14 - DE WINKEL IS GESLOTEN");
+    w.totalEnemies += (int)w.enemies.size();
+    w.Message(LevelIntro(w.level));
+}
+
+static void TakeEntrySnapshot(World& w) {
+    w.entryLoadout = CaptureLoadout(w.player);
+    w.entryKills = w.kills;
+    w.entryTotalEnemies = w.totalEnemies;
+    w.entryElapsed = w.elapsed;
+}
+
+void WorldStartRun(World& w) {
+    w = World{};
+    TakeEntrySnapshot(w);
+    LoadCurrentLevel(w);
+}
+
+void WorldNextLevel(World& w) {
+    w.level++;
+    TakeEntrySnapshot(w);
+    LoadCurrentLevel(w);
+}
+
+void WorldRestartLevel(World& w) {
+    w.kills = w.entryKills;
+    w.totalEnemies = w.entryTotalEnemies;
+    w.elapsed = w.entryElapsed;
+    ApplyLoadout(w.player, w.entryLoadout);
+    LoadCurrentLevel(w);
 }
 
 void WorldUpdate(World& w, float dt) {

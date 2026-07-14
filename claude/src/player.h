@@ -43,6 +43,22 @@ struct Player {
     int weaponFrame() const;
 };
 
+// The part of the player that walks through the dock into the next level — and what
+// R rolls a level back to. Defaults are a brand-new run. The keycard is deliberately
+// absent: every level's door needs its own pass.
+struct PlayerLoadout {
+    int health = kMaxHealth;
+    int armour = 0;
+    int ammo = kStartAmmo;
+    int flessen = 0;
+    int vuurwerk = 0;
+    bool hasWeapon[kWeaponCount] = {true, true, false, false};
+    WeaponId weapon = WeaponId::Stokbrood;
+};
+
+PlayerLoadout CaptureLoadout(const Player& p);
+void ApplyLoadout(Player& p, const PlayerLoadout& l);
+
 void PlayerUpdate(World& w, float dt);
 void PlayerDamage(World& w, int damage);
 

@@ -14,7 +14,7 @@
 namespace {
 
 constexpr int kRate = 22050;
-constexpr int kSfxCount = (int)Sfx::DeathBoss + 1;
+constexpr int kSfxCount = (int)Sfx::LevelDone + 1;
 
 bool gReady = false;
 Sound gSounds[kSfxCount]{};
@@ -215,6 +215,13 @@ void AudioInit() {
         ph2 += 141.0f / kRate;
         const float env = fminf(1.0f, t * 8.0f) * expf(-t * 2.2f);
         return (Saw(ph) * 0.6f + Saw(ph2) * 0.25f + Noise() * 0.15f) * env * 1.2f;
+    });
+
+    gSounds[(int)Sfx::LevelDone] = Render(0.8f, [ph = 0.0f](float t) mutable {
+        const float notes[4] = {523.0f, 659.0f, 784.0f, 1046.0f};
+        ph += notes[Step(t, 0.13f, 4)] / kRate;
+        const float tail = (t > 0.52f) ? expf(-(t - 0.52f) * 4.0f) : 1.0f;
+        return Square(ph) * 0.3f * expf(-fmodf(t, 0.13f) * 7.0f) * tail;
     });
 
     gSounds[(int)Sfx::DeathBoss] = Render(1.4f, [ph = 0.0f, lp = 0.0f](float t) mutable {

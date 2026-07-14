@@ -32,6 +32,28 @@ int* PlayerAmmoPool(Player& p, WeaponId id) {
     }
 }
 
+PlayerLoadout CaptureLoadout(const Player& p) {
+    PlayerLoadout l;
+    l.health = p.health;
+    l.armour = p.armour;
+    l.ammo = p.ammo;
+    l.flessen = p.flessen;
+    l.vuurwerk = p.vuurwerk;
+    for (int i = 0; i < kWeaponCount; i++) l.hasWeapon[i] = p.hasWeapon[i];
+    l.weapon = p.weapon;
+    return l;
+}
+
+void ApplyLoadout(Player& p, const PlayerLoadout& l) {
+    p.health = l.health;
+    p.armour = l.armour;
+    p.ammo = l.ammo;
+    p.flessen = l.flessen;
+    p.vuurwerk = l.vuurwerk;
+    for (int i = 0; i < kWeaponCount; i++) p.hasWeapon[i] = l.hasWeapon[i];
+    p.weapon = l.weapon;
+}
+
 // --- doors -------------------------------------------------------------------
 
 static Door* DoorNear(World& w, float reach, bool needFacing) {

@@ -376,19 +376,9 @@ void DrawBeams(const World& w) {
     }
 }
 
-}  // namespace
-
-// --- lifecycle --------------------------------------------------------------
-
-void RenderInit(const Map& map) {
-    g.world = LoadShaderFromMemory(kWorldVS, kWorldFS);
-    g.sprite = LoadShaderFromMemory(nullptr, kSpriteFS);   // raylib's default vertex stage
-    g.locViewPos = GetShaderLocation(g.world, "viewPos");
-    g.locFlicker = GetShaderLocation(g.world, "flicker");
-    g.locFlash = GetShaderLocation(g.world, "flash");
-
-    // One mesh per wall texture: every solid tile of that kind contributes its exposed
-    // faces, and the whole store draws in a handful of calls.
+// One mesh per wall texture: every solid tile of that kind contributes its exposed
+// faces, and the whole level draws in a handful of calls.
+void BuildGeometry(const Map& map) {
     MeshBuilder walls[kTileKindCount];
     MeshBuilder floorB;
     MeshBuilder ceilB;
@@ -430,15 +420,53 @@ void RenderInit(const Map& map) {
     for (const Door& d : map.doors) BuildDoor(map, d);
 }
 
-void RenderShutdown() {
+// Frees a material's map array without UnloadMaterial, which would also unload
+// the shader — ours is shared across every material and must outlive them all.
+void FreeMaterial(Material& m) {
+    MemFree(m.maps);
+    m.maps = nullptr;
+}
+
+void UnloadGeometry() {
     for (int i = 0; i < kTileKindCount; i++) {
-        if (g.hasWall[i]) UnloadMesh(g.walls[i]);
+        if (g.hasWall[i]) {
+            UnloadMesh(g.walls[i]);
+            FreeMaterial(g.wallMat[i]);
+        }
+        g.hasWall[i] = false;
     }
     UnloadMesh(g.floorMesh);
     UnloadMesh(g.ceilMesh);
-    for (DoorMesh& d : g.doors) UnloadMesh(d.mesh);
+    FreeMaterial(g.floorMat);
+    FreeMaterial(g.ceilMat);
+    for (DoorMesh& d : g.doors) {
+        UnloadMesh(d.mesh);
+        FreeMaterial(d.material);
+    }
     g.doors.clear();
+}
 
+}  // namespace
+
+// --- lifecycle --------------------------------------------------------------
+
+void RenderInit(const Map& map) {
+    g.world = LoadShaderFromMemory(kWorldVS, kWorldFS);
+    g.sprite = LoadShaderFromMemory(nullptr, kSpriteFS);   // raylib's default vertex stage
+    g.locViewPos = GetShaderLocation(g.world, "viewPos");
+    g.locFlicker = GetShaderLocation(g.world, "flicker");
+    g.locFlash = GetShaderLocation(g.world, "flash");
+
+    BuildGeometry(map);
+}
+
+void RenderRebuild(const Map& map) {
+    UnloadGeometry();
+    BuildGeometry(map);
+}
+
+void RenderShutdown() {
+    UnloadGeometry();
     UnloadShader(g.world);
     UnloadShader(g.sprite);
 }

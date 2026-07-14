@@ -4,9 +4,10 @@
 struct Map;
 struct World;
 
-// Builds the static geometry for the one level, and the two shaders. Call once, after
-// the window and the textures exist.
+// Builds the shaders and the level's static geometry. RenderInit once, after the
+// window and the textures exist; RenderRebuild on every level (re)load.
 void RenderInit(const Map& map);
+void RenderRebuild(const Map& map);
 void RenderShutdown();
 
 Camera3D SceneCamera(const World& w);

@@ -27,7 +27,8 @@ enum class Sfx {
     GuardShot,      // the beveiliger's sidearm
     DeathGuard,
     AlertBoss,      // the bedrijfsleider has seen you
-    DeathBoss,      // keep last: kSfxCount counts from here
+    DeathBoss,
+    LevelDone,      // keep last: kSfxCount counts from here
 };
 
 void AudioInit();

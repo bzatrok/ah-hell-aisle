@@ -16,7 +16,7 @@ int main() {
 
     Game game;
     GameInit(game);
-    RenderInit(game.world.map);   // the level never changes, so the geometry is built once
+    RenderInit(game.world.map);   // level (re)loads rebake via RenderRebuild (game.cpp)
 
     while (!WindowShouldClose()) {   // Esc quits on desktop; on web it returns to the title (game.cpp)
         // A stall — a window drag, a breakpoint — must not teleport anyone through a
