@@ -44,6 +44,10 @@ sed -i '' 's/#version 330/#version 300 es\'$'\nprecision highp float;/' "$SRC_WE
 # -sASYNCIFY lets the game's unmodified blocking main loop yield to the
 # browser; --preload-file mounts the frozen assets/ at virtual /assets,
 # which the game's '../assets/' probe resolves to from CWD '/'.
+# -sGROWABLE_ARRAYBUFFERS=0: with memory growth, emscripten 6 otherwise backs
+# the heap with a resizable ArrayBuffer, and Chrome rejects WebGL uploads from
+# views over resizable buffers ("texImage2D: ... must not be resizable") —
+# the first texture upload throws and the canvas stays black.
 mkdir -p "$DIST"
 em++ -std=c++17 -O2 "$SRC_WEB"/*.cpp \
   -I "$RAYLIB_SRC/src" \
@@ -52,6 +56,7 @@ em++ -std=c++17 -O2 "$SRC_WEB"/*.cpp \
   -sASYNCIFY -sASYNCIFY_STACK_SIZE=131072 \
   -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 \
   -sALLOW_MEMORY_GROWTH=1 \
+  -sGROWABLE_ARRAYBUFFERS=0 \
   --preload-file assets@assets \
   -o "$DIST/game.js"
 cp web/index.html "$DIST/index.html"
