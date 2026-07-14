@@ -35,6 +35,15 @@ this folder as shown. Builds clean under `-Wall -Wextra`.
 | `Esc` | Quit (desktop) — on the web build it returns to the title |
 | `R` | On the death screen: this level again, with what you walked in carrying |
 
+**Mobile (web).** On a touch device the web build plays with four gestures: your
+left thumb is a floating stick that moves, a tap on the right half fires (hold for
+autofire — a tap also opens the door you are facing), a horizontal swipe switches
+weapon (right = next you own, wrapping), and tilting the phone steers, steering-wheel
+style. iOS asks permission for the tilt sensor at the start tap; deny it and the
+right half becomes drag-to-look instead. Desktop input is untouched — the layer only
+exists when the browser reports a touchscreen (`src/web_input.*` is the seam the
+page injects through).
+
 Three buildings between you and the car park: the winkel, the distributiecentrum,
 the laadperron. Each ends at a loading dock door behind a keycard; on the last one
 the pass is in De Bedrijfsleider's pocket, and he is not done with his shift.

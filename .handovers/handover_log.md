@@ -33,6 +33,19 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > expansion code on `main`), and is **independent of 008**. It works on the permanent fork
 > branch `korona`, which never merges back to `main`.
 
+> **008 note (2026-07-14):** all code and docs done on `feature/mobile-controls`
+> (unmerged); native + web builds green; desktop and touch-emulation acceptance pass
+> (Puppeteer `hasTouch` run: tap = one shot, hold autofires, swipe cycles owned slots
+> both ways with wrap, 8-way stick, tilt deadzone/full-rate/sign checks via `__mob`,
+> desktop DOM untouched, zero page errors). One deviation from the doc's exact edit:
+> the fire condition's `IsMouseButtonDown` is also gated behind `!touchMode` — raylib
+> merges touch state into mouse buttons (rcore.c), so the stick finger would autofire
+> otherwise; same rationale as the doc's own `GetMouseDelta` gate. Tap-restart on the
+> dead/escaped screens shares the title path's `WebConsumeFirePressed` (verified in
+> code; not exercised live in emulation). **Remaining:** the Ben-only real-iPhone pass
+> (preview deploy command in the doc's Sequencing §3; flip the JS `SIGN` once if
+> tilting right turns left), then merge to `master` and flip this row ✅.
+
 ## Launch lines
 
 Run each from the repo root, in that model's own CLI:
