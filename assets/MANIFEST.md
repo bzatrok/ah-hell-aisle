@@ -1,7 +1,9 @@
 # Shared asset manifest
 
-Every file here is **frozen and identical for all four competitors**. Do not edit,
-regenerate, or add to this folder. Load it read-only from `../assets/`.
+The competition-era files below are **frozen**: they were identical for all four
+competitors and stay byte-for-byte as judged. Post-competition additions (the
+"Expansion set" section) come from the same generator, appended after the frozen
+stream so regeneration reproduces everything exactly. Never hand-edit this folder.
 
 All files are 32-bit RGBA PNG. Transparency is a real alpha channel — there is no
 magenta colour key. Draw sprites with alpha blending; do not premultiply.
@@ -87,6 +89,22 @@ centred (or slightly right of centre), scaled up to taste. Bob it while walking.
 
 Numbers and text on the HUD: use raylib's built-in font (`DrawText`). No bitmap
 font is shipped.
+
+## Expansion set (post-competition, handover 007)
+
+Same conventions as above unless noted.
+
+| File | Kind | Notes |
+|---|---|---|
+| `enemy_beveiliger.png` | enemy, 6×64x64 (384x64) | Possessed security guard. Advancing single-shot marksman. |
+| `enemy_bedrijfsleider.png` | enemy, 6×**96x96** (576x96) | The manager. Level-3 boss — bigger cell, same frame order. |
+| `weapon_statiegeldkanon.png` | weapon, 3×192x144 | Bottle-deposit scattergun. Uses *flessen* ammo. |
+| `weapon_vuurwerkpijl.png` | weapon, 3×192x144 | Hand-launched firework rocket. Uses *vuurwerk* ammo. |
+| `pickup_flessen.png` | pickup, 32x32 | +8 flessen (scattergun ammo). |
+| `pickup_vuurwerk.png` | pickup, 32x32 | +4 vuurwerk (rocket ammo). |
+| `pickup_statiegeldkanon.png` | pickup, 32x32 | Grants the statiegeldkanon + 12 flessen. |
+| `pickup_vuurwerkpijl.png` | pickup, 32x32 | Grants the vuurwerkpijl + 4 vuurwerk. |
+| `proj_vuurwerkpijl.png` | projectile, 16x16 | The rocket in flight. Billboard it. |
 
 ## Audio
 
