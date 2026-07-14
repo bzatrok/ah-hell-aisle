@@ -107,7 +107,7 @@ void ScreenTitle() {
 
     TextCentred("WASD lopen    MUIS / PIJLTJES draaien    KLIK of CTRL slaan en schieten",
                 kScreenW * 0.5f, 470.0f, 20, Color{120, 126, 132, 255});
-    TextCentred("1 stokbrood    2 prijspistool    E deur    ESC stoppen",
+    TextCentred("1 stokbrood    2 prijspistool    3 en 4 liggen in de winkel    E deur    M muziek",
                 kScreenW * 0.5f, 500.0f, 20, Color{120, 126, 132, 255});
 
     const float pulse = 0.55f + 0.45f * sinf((float)GetTime() * 3.4f);
