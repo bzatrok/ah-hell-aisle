@@ -10,7 +10,11 @@
     font-family: ui-monospace, Menlo, Consolas, monospace; }
   body { display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 12px; }
-  .frame { position: relative; width: min(1280px, 100vw); aspect-ratio: 16 / 9; }
+  /* The height term keeps the 16:9 frame inside the viewport — sized by width
+     alone, a phone in landscape pushes the HUD row off the bottom of the screen. */
+  .frame { position: relative; aspect-ratio: 16 / 9;
+    width: min(1280px, 100vw, calc(100vh * 16 / 9));
+    width: min(1280px, 100vw, calc(100dvh * 16 / 9)); }
   canvas { width: 100%; height: 100%; display: block; max-width: 100%;
     image-rendering: pixelated; background: #000; }
   #start { position: absolute; inset: 0; display: flex; align-items: center;
@@ -27,6 +31,9 @@
   <p class="hint">Esc releases the mouse &mdash; Esc again returns to the title screen.</p>
   <script>
   (function () {
+    // Stamped by web/build.sh. Safari clings to cached game.js/.wasm/.data long
+    // after index.html changes — versioning every asset URL forces fresh fetches.
+    var BUILD = '__BUILD_ID__';
     var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     var frame = document.querySelector('.frame');
     var ready = false;
@@ -44,6 +51,7 @@
       var canvas = document.getElementById('canvas');
       window.Module = {
         canvas: canvas,
+        locateFile: function (p) { return p + '?v=' + BUILD; },
         onRuntimeInitialized: function () {
           ready = true;
           // A rotation while the runtime was still loading was dropped by W();
@@ -52,7 +60,7 @@
         }
       };
       var engine = document.createElement('script');
-      engine.src = 'game.js';
+      engine.src = 'game.js?v=' + BUILD;
       document.body.appendChild(engine);
       canvas.focus();
       // Must happen inside this click: iOS only grants fullscreen and
@@ -72,22 +80,29 @@
 
     var touches = {};        // touch identifier -> record
     var stickId = null;      // identifier owning the virtual stick
-    var stickBase, stickNub, rotateEl;
+    var stickBase, stickNub, stickBaseR, stickNubR, rotateEl;
+    var rStickOn = false;    // an action touch is wearing the right-stick visual
     var lastStick = { x: 0, y: 0 };
     var paused = false;      // portrait: rotate overlay up, wasm told to freeze
     var yawSent = 0;         // cumulative drag-aim rad, for the test seam
 
-    document.getElementById('start').innerHTML = '&#9654; tap to start';
-    document.querySelector('.hint').textContent =
-      'left thumb moves · right thumb aims · tap fires · swipe switches weapon';
+    var startEl = document.getElementById('start');
+    startEl.style.flexDirection = 'column';
+    startEl.innerHTML = '<div>&#9654; tap to start</div>' +
+      '<div style="font-size:.85rem;color:#888;margin-top:8px">' +
+      'left thumb moves &middot; right thumb aims<br>' +
+      'tap fires &middot; swipe switches weapon</div>';
 
     var css = document.createElement('style');
     css.textContent =
+      // The hint line below the frame costs vertical room the phone doesn't
+      // have; its content moved into the start overlay above.
+      '.hint{display:none}' +
       '.frame{touch-action:none;-webkit-user-select:none;user-select:none}' +
       '.stick{position:absolute;border-radius:50%;pointer-events:none;display:none;z-index:3}' +
-      '#stick-base{width:96px;height:96px;margin:-48px 0 0 -48px;' +
+      '#stick-base,#stick-base-r{width:96px;height:96px;margin:-48px 0 0 -48px;' +
         'border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08)}' +
-      '#stick-nub{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(255,255,255,.3)}' +
+      '#stick-nub,#stick-nub-r{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(255,255,255,.3)}' +
       '#rotate{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;' +
         'align-items:center;justify-content:center;gap:10px;background:#111;' +
         'letter-spacing:.05em;text-align:center}';
@@ -98,8 +113,14 @@
       stickBase.className = 'stick'; stickBase.id = 'stick-base';
       stickNub = document.createElement('div');
       stickNub.className = 'stick'; stickNub.id = 'stick-nub';
+      stickBaseR = document.createElement('div');
+      stickBaseR.className = 'stick'; stickBaseR.id = 'stick-base-r';
+      stickNubR = document.createElement('div');
+      stickNubR.className = 'stick'; stickNubR.id = 'stick-nub-r';
       frame.appendChild(stickBase);
       frame.appendChild(stickNub);
+      frame.appendChild(stickBaseR);
+      frame.appendChild(stickNubR);
 
       try {
         if (document.documentElement.requestFullscreen) {
@@ -120,13 +141,13 @@
 
     // ---- virtual stick (left half) ----
 
-    function placeStick(bx, by, nx, ny) {
-      stickBase.style.display = stickNub.style.display = 'block';
+    function placeStick(base, nub, bx, by, nx, ny) {
+      base.style.display = nub.style.display = 'block';
       var rect = frame.getBoundingClientRect();
-      stickBase.style.left = (bx - rect.left) + 'px';
-      stickBase.style.top = (by - rect.top) + 'px';
-      stickNub.style.left = (nx - rect.left) + 'px';
-      stickNub.style.top = (ny - rect.top) + 'px';
+      base.style.left = (bx - rect.left) + 'px';
+      base.style.top = (by - rect.top) + 'px';
+      nub.style.left = (nx - rect.left) + 'px';
+      nub.style.top = (ny - rect.top) + 'px';
     }
 
     function sendMove(x, y) {
@@ -138,7 +159,7 @@
       if (stickId !== null) { touches[id] = { kind: 'dead' }; return; }
       stickId = id;
       touches[id] = { kind: 'stick', bx: cx, by: cy };
-      placeStick(cx, cy, cx, cy);
+      placeStick(stickBase, stickNub, cx, cy, cx, cy);
       sendMove(0, 0);
     }
 
@@ -147,7 +168,7 @@
       var len = Math.hypot(dx, dy);
       var vis = Math.min(len, STICK_CLAMP);
       var ux = len > 0 ? dx / len : 0, uy = len > 0 ? dy / len : 0;
-      placeStick(rec.bx, rec.by, rec.bx + ux * vis, rec.by + uy * vis);
+      placeStick(stickBase, stickNub, rec.bx, rec.by, rec.bx + ux * vis, rec.by + uy * vis);
       if (len <= STICK_DEAD) { sendMove(0, 0); return; }
       var sx = dx / STICK_FULL, sy = -dy / STICK_FULL;   // screen-up = forward
       var sLen = Math.hypot(sx, sy);
@@ -165,7 +186,12 @@
 
     function startAction(id, cx, cy) {
       var rec = { kind: 'action', state: 'PENDING',
-                  t0: performance.now(), x0: cx, y0: cy, x: cx, y: cy, timer: 0 };
+                  t0: performance.now(), x0: cx, y0: cy, x: cx, y: cy, timer: 0,
+                  bx: cx, by: cy, stick: false };
+      if (!rStickOn) {   // the first right-half finger wears the aim-stick visual
+        rStickOn = rec.stick = true;
+        placeStick(stickBaseR, stickNubR, cx, cy, cx, cy);
+      }
       rec.timer = setTimeout(function () {
         if (rec.state === 'PENDING') {
           rec.state = 'FIRING';           // held: autofire until the finger lifts
@@ -189,10 +215,27 @@
         yawSent += d;
         W('web_add_yaw', d);
       }
+      if (rec.stick) {
+        // The nub rides the finger; past the rim the base drifts after it, so a
+        // long aim drag doesn't strand the visual back at the touch-down point.
+        var dx = cx - rec.bx, dy = cy - rec.by, len = Math.hypot(dx, dy);
+        if (len > STICK_CLAMP) {
+          rec.bx += dx * (1 - STICK_CLAMP / len);
+          rec.by += dy * (1 - STICK_CLAMP / len);
+        }
+        placeStick(stickBaseR, stickNubR, rec.bx, rec.by, cx, cy);
+      }
+    }
+
+    function hideRStick(rec) {
+      if (!rec.stick) return;
+      rec.stick = false; rStickOn = false;
+      stickBaseR.style.display = stickNubR.style.display = 'none';
     }
 
     function endAction(rec) {
       clearTimeout(rec.timer);
+      hideRStick(rec);
       if (rec.state === 'FIRING') {
         W('web_set_fire', 0);
       } else if (rec.state === 'PENDING') {
@@ -257,6 +300,7 @@
         if (rec.kind === 'stick') endStick();
         else if (rec.kind === 'action') {   // cancelled touches never tap-fire
           clearTimeout(rec.timer);
+          hideRStick(rec);
           if (rec.state === 'FIRING') W('web_set_fire', 0);
         }
         delete touches[id];
@@ -279,6 +323,7 @@
         var rec = touches[id];
         if (rec.kind === 'action') {
           clearTimeout(rec.timer);
+          hideRStick(rec);
           if (rec.state === 'FIRING') W('web_set_fire', 0);
         }
       }
@@ -294,6 +339,12 @@
     };
     window.addEventListener('resize', function () { applyOrient(); });
     window.addEventListener('orientationchange', function () { applyOrient(); });
+    // iOS can thaw a suspended tab in a new orientation without firing either
+    // event above — re-check whenever the page comes back to the foreground.
+    window.addEventListener('pageshow', function () { applyOrient(); });
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) applyOrient();
+    });
     applyOrient();
 
     // Desktop test seam: read the mobile layer's state back.

@@ -45,7 +45,10 @@ em++ -std=c++17 -O2 claude/src/*.cpp \
   -sGROWABLE_ARRAYBUFFERS=0 \
   --preload-file assets@assets \
   -o "$DIST/game.js"
-cp web/index.html "$DIST/index.html"
+# Version-stamp the shell page: index.html's BUILD appends ?v= to every asset
+# URL, so Safari's stubbornly cached game.js/.wasm/.data get refetched per build.
+BUILD_ID="$(git describe --always --dirty 2>/dev/null || echo dev)"
+sed "s/__BUILD_ID__/$BUILD_ID/g" web/index.html > "$DIST/index.html"
 
 echo "Build complete:"
 ls -lh "$DIST"
