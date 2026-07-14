@@ -24,6 +24,8 @@ void WorldInit(World& w) {
             case '1': w.enemies.push_back(MakeEnemy(EnemyKind::Winkelwagen, centre)); break;
             case '2': w.enemies.push_back(MakeEnemy(EnemyKind::Vakkenvuller, centre)); break;
             case '3': w.enemies.push_back(MakeEnemy(EnemyKind::Zelfscanner, centre)); break;
+            case '4': w.enemies.push_back(MakeEnemy(EnemyKind::Beveiliger, centre)); break;
+            case '5': w.enemies.push_back(MakeEnemy(EnemyKind::Bedrijfsleider, centre)); break;
             case 'a': w.pickups.push_back({PickupKind::Appelflap, centre, false, 0.0f}); break;
             case 'r': w.pickups.push_back({PickupKind::Rookworst, centre, false, 0.0f}); break;
             case 'l': w.pickups.push_back({PickupKind::Labels, centre, false, 0.0f}); break;

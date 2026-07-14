@@ -51,6 +51,8 @@ void AssetsLoad() {
     gAssets.enemy[(int)EnemyKind::Winkelwagen] = Grab("enemy_winkelwagen.png");
     gAssets.enemy[(int)EnemyKind::Vakkenvuller] = Grab("enemy_vakkenvuller.png");
     gAssets.enemy[(int)EnemyKind::Zelfscanner] = Grab("enemy_zelfscanner.png");
+    gAssets.enemy[(int)EnemyKind::Beveiliger] = Grab("enemy_beveiliger.png");
+    gAssets.enemy[(int)EnemyKind::Bedrijfsleider] = Grab("enemy_bedrijfsleider.png");
 
     gAssets.pickup[(int)PickupKind::Appelflap] = Grab("pickup_appelflap.png");
     gAssets.pickup[(int)PickupKind::Rookworst] = Grab("pickup_rookworst.png");

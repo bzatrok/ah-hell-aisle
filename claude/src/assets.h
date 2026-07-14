@@ -8,7 +8,7 @@ struct Assets {
     Texture2D wall[kTileKindCount];   // indexed by Tile; the Empty slot is unused
     Texture2D floorTex;
     Texture2D ceilingTex;
-    Texture2D enemy[3];               // indexed by EnemyKind
+    Texture2D enemy[5];               // indexed by EnemyKind
     Texture2D pickup[9];              // indexed by PickupKind
     Texture2D weapon[4];              // indexed by WeaponId
     Texture2D soupCan;

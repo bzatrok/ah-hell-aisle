@@ -14,7 +14,7 @@
 namespace {
 
 constexpr int kRate = 22050;
-constexpr int kSfxCount = (int)Sfx::WeaponSwitch + 1;
+constexpr int kSfxCount = (int)Sfx::DeathBoss + 1;
 
 bool gReady = false;
 Sound gSounds[kSfxCount]{};
@@ -195,6 +195,36 @@ void AudioInit() {
     gSounds[(int)Sfx::WeaponSwitch] = Render(0.06f, [ph = 0.0f](float t) mutable {
         ph += 300.0f / kRate;
         return (Noise() * 0.4f + Square(ph) * 0.3f) * expf(-t * 70.0f);
+    });
+
+    gSounds[(int)Sfx::GuardShot] = Render(0.18f, [ph = 0.0f](float t) mutable {
+        const float f = 1400.0f * expf(-t * 30.0f) + 180.0f;
+        ph += f / kRate;
+        return (Square(ph) * 0.5f + Noise() * 0.4f) * expf(-t * 22.0f);
+    });
+
+    gSounds[(int)Sfx::DeathGuard] = Render(0.7f, [ph = 0.0f, lp = 0.0f](float t) mutable {
+        ph += fmaxf(50.0f, 130.0f - t * 90.0f) / kRate;
+        lp += (Noise() - lp) * 0.3f;
+        const float radio = (t < 0.25f) ? lp * 1.2f : 0.0f;   // the radio dies first
+        return radio + Saw(ph) * 0.5f * fminf(1.0f, t * 10.0f) * expf(-t * 3.5f);
+    });
+
+    gSounds[(int)Sfx::AlertBoss] = Render(0.8f, [ph = 0.0f, ph2 = 0.0f](float t) mutable {
+        ph += (70.0f + sinf(t * 30.0f) * 6.0f) / kRate;       // a bellow from the office
+        ph2 += 141.0f / kRate;
+        const float env = fminf(1.0f, t * 8.0f) * expf(-t * 2.2f);
+        return (Saw(ph) * 0.6f + Saw(ph2) * 0.25f + Noise() * 0.15f) * env * 1.2f;
+    });
+
+    gSounds[(int)Sfx::DeathBoss] = Render(1.4f, [ph = 0.0f, lp = 0.0f](float t) mutable {
+        ph += (100.0f * expf(-t * 1.8f) + 28.0f) / kRate;
+        lp += (Noise() - lp) * 0.1f;
+        float thud = 0.0f;                                    // he lands twice
+        for (const float hit : {0.55f, 0.8f}) {
+            if (t >= hit) thud += expf(-(t - hit) * 20.0f);
+        }
+        return Saw(ph) * 0.5f * expf(-t * 1.6f) + lp * 1.4f * thud;
     });
 
     // The building itself: compressors, a strip light, the till that never sleeps.

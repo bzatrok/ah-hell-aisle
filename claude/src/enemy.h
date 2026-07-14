@@ -3,7 +3,13 @@
 
 struct World;
 
-enum class EnemyKind : int { Winkelwagen = 0, Vakkenvuller = 1, Zelfscanner = 2 };
+enum class EnemyKind : int {
+    Winkelwagen = 0,
+    Vakkenvuller = 1,
+    Zelfscanner = 2,
+    Beveiliger = 3,      // advancing marksman: closes in, frozen-ray single shots
+    Bedrijfsleider = 4,  // the boss: alternates charging and can barrages
+};
 
 enum class EnemyState : unsigned char {
     Idle,    // has not noticed you
@@ -42,6 +48,8 @@ struct Enemy {
     Vector2 aimDir{};      // frozen at attack start — the dodgeable-beam mechanic
     float beam = 0.0f;     // >0 while its beam is drawn
     float aimBeam = 0.0f;  // >0 while it is winding up: the telegraph you can dodge
+    int phase = 0;         // bedrijfsleider only: 0 = charge, 1 = barrage
+    float phaseTimer = 0.0f;
 
     bool alive() const { return state != EnemyState::Dying && state != EnemyState::Dead; }
     int frame() const;

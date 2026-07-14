@@ -23,7 +23,11 @@ enum class Sfx {
     RocketLaunch,   // vuurwerkpijl leaves the pipe
     Explosion,
     WeaponUp,       // picked up a new gun
-    WeaponSwitch,   // keep last: kSfxCount counts from here
+    WeaponSwitch,
+    GuardShot,      // the beveiliger's sidearm
+    DeathGuard,
+    AlertBoss,      // the bedrijfsleider has seen you
+    DeathBoss,      // keep last: kSfxCount counts from here
 };
 
 void AudioInit();

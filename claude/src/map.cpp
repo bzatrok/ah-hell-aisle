@@ -11,6 +11,7 @@
 //   s  picked-clean gondola  F  freezer          M  magazijn (back of house)
 //   K  keycard door        X  loading dock door  .  floor
 //   @  you                 1  winkelwagen  2  vakkenvuller  3  zelfscanner
+//   4  beveiliger          5  bedrijfsleider (the boss)
 //   a  appelflap  r  rookworst  l  labels  b  bonuskaart  k  the keycard
 //   f  flessen (ammo 3)  v  vuurwerk (ammo 4)  g  statiegeldkanon  p  vuurwerkpijl
 //
@@ -24,10 +25,10 @@ static const char* const kLevel[Map::H] = {
     "M................3................l....M",
     "M..MM...MM...MM.....3...MM...MM........M",
     "M..MM...MM...MM.....l...MM...MM........M",
-    "M.....2.............r............2.....M",
+    "M.....2...4.........r............2.....M",
     "M.....MM...MM.........MM...MM...MM.....M",
     "M.....MM...MM.........MM...MM...MM.....M",
-    "M..l....1.....................1........M",
+    "M..l....1................4....1........M",
     "MMMMMMMMMMMMMMMMMMMKMMMMMMMMMMMMMMMMMMMM",
     "#.....3.......................1........#",
     "#............2.....a.g..1..............#",

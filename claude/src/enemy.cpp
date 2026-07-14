@@ -8,12 +8,14 @@
 #include "raymath.h"
 #include "world.h"
 
-// The three of them, exactly as SPEC §6 lists them.
+// The first three exactly as SPEC §6 listed them; the last two are the expansion.
 //               health  speed  radius  sight  range  cooldown  damage  sprite
-static const EnemyStats kStats[3] = {
+static const EnemyStats kStats[5] = {
     {  30,  4.0f,  0.30f,  18.0f,   0.95f,  1.0f,  10,  1.00f },  // Winkelwagen: the rusher
     {  60,  1.8f,  0.30f,  16.0f,  10.00f,  2.0f,  15,  1.35f },  // Vakkenvuller: the zoner
     { 100,  0.4f,  0.36f,  15.0f,  14.00f,  1.5f,   5,  1.30f },  // Zelfscanner:  the turret
+    {  80,  2.6f,  0.30f,  17.0f,  12.00f,  1.8f,  10,  1.35f },  // Beveiliger:   the marksman
+    { 500,  3.2f,  0.50f,  20.0f,   1.10f,  1.2f,  25,  1.90f },  // Bedrijfsleider: the boss
 };
 
 const EnemyStats& StatsFor(EnemyKind kind) { return kStats[(int)kind]; }
@@ -103,6 +105,23 @@ static bool FrozenRayHits(const World& w, const Enemy& e, float range) {
     return along > 0.0f && along <= range && perp2 <= halfW * halfW;
 }
 
+// Lob a soup can at the player, `angleOffset` radians off the direct line. The
+// arc is tuned to land where the player stands now.
+static void ThrowCan(World& w, const Enemy& e, float angleOffset) {
+    const Vector2 toPlayer = Vector2Subtract(w.player.pos, e.pos);
+    const float d = fmaxf(0.5f, Vector2Length(toPlayer));
+    const float angle = atan2f(toPlayer.y, toPlayer.x) + angleOffset;
+    const Vector2 dir = {cosf(angle), sinf(angle)};
+
+    Projectile can;
+    can.pos = Vector2Add(e.pos, Vector2Scale(dir, StatsFor(e.kind).radius + 0.1f));
+    can.vel = Vector2Scale(dir, kCanSpeed);
+    can.height = kCanLaunchHeight;
+    can.vy = 0.5f * kCanGravity * (d / kCanSpeed);
+    can.life = 5.0f;
+    w.projectiles.push_back(can);
+}
+
 // --- the rusher --------------------------------------------------------------
 // Sees you, picks up speed, and does not stop. Thirty health: it dies to one swing
 // and a bit, but it will be on you before you have finished the swing.
@@ -187,17 +206,7 @@ static void UpdateVakkenvuller(World& w, Enemy& e, float dist, bool los, float d
             e.stateTimer += dt;
             if (e.shotsLeft > 0 && e.stateTimer >= 0.34f) {   // the wind-up you can read
                 e.shotsLeft = 0;
-
-                const float d = fmaxf(0.5f, dist);
-                const Vector2 dir = Vector2Normalize(toPlayer);
-                Projectile can;
-                can.pos = Vector2Add(e.pos, Vector2Scale(dir, s.radius + 0.1f));
-                can.vel = Vector2Scale(dir, kCanSpeed);
-                can.height = kCanLaunchHeight;
-                can.vy = 0.5f * kCanGravity * (d / kCanSpeed);   // lands where you stand now
-                can.life = 5.0f;
-                w.projectiles.push_back(can);
-
+                ThrowCan(w, e, 0.0f);
                 PlaySfxAt(Sfx::CanThrow, dist);
             }
             if (e.stateTimer >= 0.62f) EndAttack(e);
@@ -264,6 +273,161 @@ static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt
     }
 }
 
+// --- the marksman --------------------------------------------------------------
+// A beveiliger who never clocked out. Closes to mid range, sidesteps while his
+// sidearm cools, then paints you for half a second and fires one frozen-ray shot —
+// the zelfscanner's mechanic on legs.
+
+static void UpdateBeveiliger(World& w, Enemy& e, float dist, bool los, float dt) {
+    const EnemyStats& s = StatsFor(e.kind);
+    constexpr float kWindup = 0.5f;
+
+    switch (e.state) {
+        case EnemyState::Idle:
+            if (Notices(w, e, dist)) e.state = EnemyState::Chase;
+            break;
+
+        case EnemyState::Chase: {
+            if (los && dist < s.attackRange && e.cooldown <= 0.0f && !w.player.dead()) {
+                BeginAttack(e, 1);
+                FreezeAim(w, e);
+                break;
+            }
+
+            e.strafeTimer -= dt;
+            if (e.strafeTimer <= 0.0f) {
+                e.strafeTimer = 0.8f + (float)GetRandomValue(0, 100) / 100.0f;
+                e.strafe = Vector2Scale(e.strafe, -1.0f);
+            }
+
+            Vector2 wish;
+            const Vector2 toPlayer = Vector2Subtract(w.player.pos, e.pos);
+            if (dist > 6.0f || !los) {
+                wish = toPlayer;                                   // advance
+            } else {
+                const Vector2 side = {-toPlayer.y, toPlayer.x};    // hold and sidestep
+                wish = Vector2Scale(side, e.strafe.x);
+            }
+            const Vector2 before = e.pos;
+            Step(w, e, wish, dt);
+            if (Vector2Distance(before, e.pos) < s.speed * dt * 0.4f) {
+                e.strafeTimer = 0.0f;   // walked into a shelf: try the other way
+            }
+            break;
+        }
+
+        case EnemyState::Attack:
+            e.stateTimer += dt;
+
+            if (!los || w.player.dead()) {   // you broke his line: he re-aims
+                EndAttack(e);
+                e.cooldown = 0.8f;
+                break;
+            }
+
+            if (e.stateTimer < kWindup) {
+                e.aimBeam = 1.0f;
+                break;
+            }
+
+            e.aimBeam = 0.0f;
+            if (e.shotsLeft > 0) {
+                e.shotsLeft = 0;
+                e.beam = 0.09f;
+                if (los && FrozenRayHits(w, e, s.attackRange + 1.0f)) {
+                    PlayerDamage(w, s.damage);
+                }
+                PlaySfxAt(Sfx::GuardShot, dist);
+            }
+            if (e.stateTimer >= kWindup + 0.15f) EndAttack(e);
+            break;
+
+        default:
+            break;
+    }
+}
+
+// --- the boss ------------------------------------------------------------------
+// De Bedrijfsleider. Alternates on a timer between charging you down like a
+// winkelwagen with a salary and standing to hurl fans of soup cans. Level 3's
+// keycard is in his pocket; see EnemyHurt.
+
+constexpr float kBossChargeTime = 5.0f;
+constexpr float kBossBarrageTime = 3.2f;
+constexpr float kBossBarrageCooldown = 1.4f;
+
+static void BossIntro(World& w, Enemy& e) {
+    w.Message("DE BEDRIJFSLEIDER: 'WIJ SLUITEN NOOIT.'");
+    PlaySfxAt(Sfx::AlertBoss, Vector2Distance(e.pos, w.player.pos));
+    e.phase = 0;
+    e.phaseTimer = kBossChargeTime;
+}
+
+static void UpdateBedrijfsleider(World& w, Enemy& e, float dist, bool los, float dt) {
+    const EnemyStats& s = StatsFor(e.kind);
+
+    switch (e.state) {
+        case EnemyState::Idle:
+            if (Notices(w, e, dist)) {
+                e.state = EnemyState::Chase;
+                BossIntro(w, e);
+            }
+            break;
+
+        case EnemyState::Chase:
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0.0f) {
+                e.phase = 1 - e.phase;
+                e.phaseTimer = (e.phase == 0) ? kBossChargeTime : kBossBarrageTime;
+            }
+
+            if (e.phase == 0) {
+                // Charge: winkelwagen logic, at scale.
+                if (dist <= s.attackRange + kPlayerRadius && e.cooldown <= 0.0f && los &&
+                    !w.player.dead()) {
+                    BeginAttack(e, 1);
+                    break;
+                }
+                Step(w, e, Vector2Subtract(w.player.pos, e.pos), dt);
+            } else if (los && e.cooldown <= 0.0f && !w.player.dead()) {
+                // Barrage: stand and throw. The fan launches from the Attack state.
+                BeginAttack(e, 3);
+            }
+            break;
+
+        case EnemyState::Attack:
+            e.stateTimer += dt;
+            if (e.phase == 0) {
+                // The contact hit, exactly like the trolley's.
+                if (e.shotsLeft > 0 && e.stateTimer >= 0.16f) {
+                    e.shotsLeft = 0;
+                    if (Vector2Distance(e.pos, w.player.pos) <=
+                        s.attackRange + kPlayerRadius + 0.2f) {
+                        PlayerDamage(w, s.damage);
+                    }
+                }
+                if (e.stateTimer >= 0.42f) EndAttack(e);
+            } else {
+                // The fan: -15deg / 0 / +15deg, all at once, after a readable windup.
+                if (e.shotsLeft > 0 && e.stateTimer >= 0.3f) {
+                    e.shotsLeft = 0;
+                    for (const float off : {-15.0f * DEG2RAD, 0.0f, 15.0f * DEG2RAD}) {
+                        ThrowCan(w, e, off);
+                    }
+                    PlaySfxAt(Sfx::CanThrow, dist);
+                }
+                if (e.stateTimer >= 0.6f) {
+                    EndAttack(e);
+                    e.cooldown = kBossBarrageCooldown;
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
 // --- shared frame ------------------------------------------------------------
 
 static void KeepApart(World& w) {
@@ -312,9 +476,11 @@ void EnemiesUpdate(World& w, float dt) {
         const bool los = w.map.LineOfSight(e.pos, w.player.pos);
 
         switch (e.kind) {
-            case EnemyKind::Winkelwagen:  UpdateWinkelwagen(w, e, dist, los, dt); break;
-            case EnemyKind::Vakkenvuller: UpdateVakkenvuller(w, e, dist, los, dt); break;
-            case EnemyKind::Zelfscanner:  UpdateZelfscanner(w, e, dist, los, dt); break;
+            case EnemyKind::Winkelwagen:    UpdateWinkelwagen(w, e, dist, los, dt); break;
+            case EnemyKind::Vakkenvuller:   UpdateVakkenvuller(w, e, dist, los, dt); break;
+            case EnemyKind::Zelfscanner:    UpdateZelfscanner(w, e, dist, los, dt); break;
+            case EnemyKind::Beveiliger:     UpdateBeveiliger(w, e, dist, los, dt); break;
+            case EnemyKind::Bedrijfsleider: UpdateBedrijfsleider(w, e, dist, los, dt); break;
         }
     }
 
@@ -399,7 +565,10 @@ void EnemyHurt(World& w, Enemy& e, int damage) {
     e.hurtFlash = 1.0f;
 
     if (e.health > 0) {
-        if (e.state == EnemyState::Idle) e.state = EnemyState::Chase;   // that got its attention
+        if (e.state == EnemyState::Idle) {
+            e.state = EnemyState::Chase;   // that got its attention
+            if (e.kind == EnemyKind::Bedrijfsleider) BossIntro(w, e);
+        }
         return;
     }
 
@@ -414,6 +583,13 @@ void EnemyHurt(World& w, Enemy& e, int damage) {
         case EnemyKind::Winkelwagen:  PlaySfxAt(Sfx::DeathCart, dist); break;
         case EnemyKind::Vakkenvuller: PlaySfxAt(Sfx::DeathStocker, dist); break;
         case EnemyKind::Zelfscanner:  PlaySfxAt(Sfx::DeathScanner, dist); break;
+        case EnemyKind::Beveiliger:   PlaySfxAt(Sfx::DeathGuard, dist); break;
+        case EnemyKind::Bedrijfsleider:
+            // The pass was in his pocket the whole time.
+            PlaySfxAt(Sfx::DeathBoss, dist);
+            w.pickups.push_back({PickupKind::Keycard, e.pos, false, 0.0f});
+            w.Message("HIJ LAAT DE PAS VALLEN");
+            break;
     }
 }
 

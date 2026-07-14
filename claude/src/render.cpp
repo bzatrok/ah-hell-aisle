@@ -311,10 +311,12 @@ constexpr float kCanSize = 0.26f;
 void CollectSprites(const World& w, Vector3 eye, std::vector<Billboard>& out) {
     for (const Enemy& e : w.enemies) {
         const float size = StatsFor(e.kind).spriteSize;
+        // Sheets are 64px cells; the boss was drawn at 96 so he can carry detail.
+        const float cell = (e.kind == EnemyKind::Bedrijfsleider) ? 96.0f : 64.0f;
         const Vector3 at = {e.pos.x, 0.0f, e.pos.y};
         const Color tint = FlashWhite(LightFor(w, at, eye), e.hurtFlash);
         out.push_back({gAssets.enemy[(int)e.kind],
-                       {e.frame() * 64.0f, 0.0f, 64.0f, 64.0f},
+                       {e.frame() * cell, 0.0f, cell, cell},
                        at,
                        {size, size},
                        tint,
