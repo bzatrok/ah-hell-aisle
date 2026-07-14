@@ -35,7 +35,10 @@ fi
 # the vertex stage (mediump there could jitter gl_Position math).
 rm -rf "$SRC_WEB"
 cp -R claude/src "$SRC_WEB"
-sed -i '' 's/#version 330/#version 300 es\'$'\nprecision highp float;/' "$SRC_WEB/render.cpp"
+# tmp-file dance instead of sed -i: BSD and GNU sed disagree on -i syntax,
+# and this script now also runs on Linux in CI.
+sed 's/#version 330/#version 300 es\'$'\nprecision highp float;/' "$SRC_WEB/render.cpp" \
+  > "$SRC_WEB/render.cpp.tmp" && mv "$SRC_WEB/render.cpp.tmp" "$SRC_WEB/render.cpp"
 [ "$(grep -c '300 es' "$SRC_WEB/render.cpp")" -eq 3 ] || {
   echo "shader transform failed: expected 3 '#version 300 es' occurrences" >&2
   exit 1
