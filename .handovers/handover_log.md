@@ -9,12 +9,15 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 
 | # | Slug | Executor | Goal | Status | Folder | Created | Completed |
 |---|------|----------|------|--------|--------|---------|-----------|
-| 001 | [ah-hell-aisle](../HANDOVER.md) | opencode | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `opencode/` | 2026-07-13 | — |
-| 002 | [ah-hell-aisle](../HANDOVER.md) | vibe | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `vibe/` | 2026-07-13 | — |
+| 001 | [ah-hell-aisle](../HANDOVER.md) | opencode | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `runner-ups/opencode/` | 2026-07-13 | — |
+| 002 | [ah-hell-aisle](../HANDOVER.md) | vibe | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `runner-ups/vibe/` | 2026-07-13 | — |
 | 003 | [ah-hell-aisle](../HANDOVER.md) | claude | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `claude/` | 2026-07-13 | — |
-| 004 | [ah-hell-aisle](../HANDOVER.md) | codex | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `codex/` | 2026-07-13 | — |
-| 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `claude_fable/` | 2026-07-13 | 2026-07-13 |
+| 004 | [ah-hell-aisle](../HANDOVER.md) | codex | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `runner-ups/codex/` | 2026-07-13 | — |
+| 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `runner-ups/claude_fable/` | 2026-07-13 | 2026-07-13 |
 | 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | 🔄 in-progress | `web/` | 2026-07-14 | — |
+
+> **Arena result (2026-07-14):** `claude/` won and is unlocked for further development.
+> The other implementations were archived under `runner-ups/`.
 
 > **006 note (2026-07-14):** built and visually verified in headless Chrome — title screen, textured world, HUD and movement all render; `claude/`/`assets/` untouched. Fixed an initial black screen: emscripten 6 + `ALLOW_MEMORY_GROWTH` backs the heap with a resizable ArrayBuffer, which Chrome rejects for WebGL texture uploads; `-sGROWABLE_ARRAYBUFFERS=0` restores classic growth. Only the deploy remains, pending Ben's approval: `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle`.
 

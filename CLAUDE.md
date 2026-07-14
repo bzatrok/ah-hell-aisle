@@ -1,35 +1,42 @@
-# AH: Hell Aisle — model bake-off
+# AH: Hell Aisle
 
-Four models each build the same game, independently, from the same spec, so we can
-compare them. This repo is the arena, not a codebase.
+A Doom 2 clone set in an Albert Heijn after closing time. Started as a four-model
+bake-off (the contract lives on in `SPEC.md` / `HANDOVER.md` / `JUDGING.md`); the
+competition was decided on 2026-07-14: **`claude/` won** and is now the game under
+active development. The arena freeze on `claude/` is lifted.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `SPEC.md` | The contract. The game every competitor must build. |
-| `HANDOVER.md` | The exact prompt pasted into each model. Identical for all four. |
-| `JUDGING.md` | Score sheet. |
-| `assets/` | **Frozen.** Shared, identical art. Read-only to everyone. |
-| `tools/gen_assets.py` | Regenerates `assets/` deterministically. Already run. |
-| `opencode/` `vibe/` `claude/` `codex/` | One competitor each. Started empty. |
+| `claude/` | **The game.** The winning implementation, open for development. |
+| `web/` | WASM harness + Cloudflare Pages deploy. `./web/build.sh` → `web/dist/`. |
+| `assets/` | The art. Generated deterministically by `tools/gen_assets.py` — keep it regenerable. |
+| `runner-ups/` | The other bake-off implementations, archived. |
+| `SPEC.md` `HANDOVER.md` `JUDGING.md` | The original competition contract, kept for the record. |
+| `.handovers/` | Handover docs and the log tracking them. |
 
-## Rules of the arena
+## Rules
 
-- **Never edit `assets/`.** The whole comparison rests on the art being held constant.
-- **Never touch another competitor's folder.** If you are working as one of the four,
-  your world is your own folder plus read-only `../assets/`.
-- **Do not "help" a competitor after the fact.** They each got one shot at
-  `HANDOVER.md` with no coaching. Fixing one of them invalidates the run.
-- The spec is C++17 + raylib + CMake, macOS. No other dependencies.
+- **`runner-ups/` is a museum: never edit it.** (From their new depth the archived
+  games find the art via their `../../assets/` fallback, where they have one.)
+- New art goes through `tools/gen_assets.py`, never hand-dropped into `assets/`,
+  so the whole set stays reproducible from one script.
+- The spec is C++17 + raylib + CMake. The web build adds Emscripten, nothing else.
 
-## If you are asked to work on the meta-repo
+## Build
 
-Changes to `SPEC.md` after the models have started invalidate the comparison. If the
-spec is wrong, say so — don't quietly patch it.
-
-## Prereqs
+Native (from `claude/`):
 
 ```sh
 brew install cmake raylib
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+./build/ah_hell_aisle
+```
+
+Web (from the repo root):
+
+```sh
+brew install emscripten
+./web/build.sh   # → web/dist/, deployable to Cloudflare Pages project ah-hell-aisle
 ```
