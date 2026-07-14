@@ -29,7 +29,16 @@ namespace {
 
 constexpr float kFogDensity = 0.0105f;   // exp(-d^2 * k): the aisle fades out around ten tiles
 
-const char* kWorldVS = R"(#version 330
+// One shader source, two dialects: desktop GL 3.3 and WebGL 2's GLSL ES 3.00,
+// which also demands an explicit default float precision (highp is safe in the
+// vertex stage too — mediump there could jitter gl_Position math).
+#if defined(__EMSCRIPTEN__)
+#define GLSL_HEADER "#version 300 es\nprecision highp float;\n"
+#else
+#define GLSL_HEADER "#version 330\n"
+#endif
+
+const char* kWorldVS = GLSL_HEADER R"(
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 in vec4 vertexColor;
@@ -47,7 +56,7 @@ void main()
 }
 )";
 
-const char* kWorldFS = R"(#version 330
+const char* kWorldFS = GLSL_HEADER R"(
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragWorld;
@@ -75,7 +84,7 @@ void main()
 
 // Sprites are cutouts: throw away the transparent pixels so every billboard writes
 // real depth and occludes the ones behind it, whatever order they arrive in.
-const char* kSpriteFS = R"(#version 330
+const char* kSpriteFS = GLSL_HEADER R"(
 in vec2 fragTexCoord;
 in vec4 fragColor;
 uniform sampler2D texture0;
