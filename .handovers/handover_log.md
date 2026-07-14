@@ -16,7 +16,7 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `runner-ups/claude_fable/` | 2026-07-13 | 2026-07-13 |
 | 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | ✅ done | `web/` | 2026-07-14 | 2026-07-14 |
 | 008 | [mobile-touch-controls](handover_008_mobile-touch-controls.md) | fresh session | Mobile web controls: tap fire/use, swipe weapons, tilt aim, virtual stick | ⬜ pending | `claude/src` + `web/` | 2026-07-14 | — |
-| 007 | [game-expansion](handover_007_game-expansion.md) | fresh session | Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music | 🔄 in-progress | `claude/` | 2026-07-14 | — |
+| 007 | [game-expansion](handover_007_game-expansion.md) | fresh session | Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music | ✅ done | `claude/` | 2026-07-14 | 2026-07-14 |
 | 009 | [korona-parliament-fork](handover_009_korona-parliament-fork.md) | fresh session | Fork: Hungarian Parliament re-theme, regalia weapons, fictional cast | ⬜ pending | branch `korona`: `claude/` + `assets/` + `tools/` | 2026-07-14 | — |
 
 > **Arena result (2026-07-14):** `claude/` won and is unlocked for further development.
