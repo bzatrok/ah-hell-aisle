@@ -54,6 +54,16 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > re-verified drag-aim, stick, tap-start and the pause/resume round-trip, zero page
 > errors; preview redeployed. **Remaining:** Ben re-tests on the phone, then merge.
 
+> **008 round 2 (2026-07-14, Ben's second device pass):** three fixes. The 16:9 frame
+> is now bounded by viewport height too (landscape cut the HUD off the bottom); the
+> right thumb gets its own floating stick visual while aiming; and the portrait pause
+> that worked in emulation but not on the phone is pinned on Safari serving the *old*
+> cached wasm without `web_set_paused` — every asset URL now carries a `?v=<build-id>`
+> stamped by `web/build.sh`, and orientation is re-checked on `pageshow`/
+> `visibilitychange` for tabs iOS thaws already rotated. Headless suite green
+> (frame ≤ viewport, drag-aim, right-stick show/hide, pause round-trip, 0 errors).
+> **Remaining:** unchanged — Ben's phone pass, then merge.
+
 ## Launch lines
 
 Run each from the repo root, in that model's own CLI:
