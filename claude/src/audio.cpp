@@ -14,7 +14,7 @@
 namespace {
 
 constexpr int kRate = 22050;
-constexpr int kSfxCount = (int)Sfx::Escaped + 1;
+constexpr int kSfxCount = (int)Sfx::WeaponSwitch + 1;
 
 bool gReady = false;
 Sound gSounds[kSfxCount]{};
@@ -167,6 +167,34 @@ void AudioInit() {
         ph += notes[Step(t, 0.16f, 6)] / kRate;
         const float env = expf(-fmodf(t, 0.16f) * 6.0f) * (t > 0.96f ? expf(-(t - 0.96f) * 3.0f) : 1.0f);
         return Square(ph) * 0.28f * env;
+    });
+
+    gSounds[(int)Sfx::Scattergun] = Render(0.32f, [lp = 0.0f, ph = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.35f;                        // a crate of glass, all at once
+        ph += (90.0f * expf(-t * 18.0f) + 48.0f) / kRate;
+        return (lp * 1.2f + Saw(ph) * 0.4f) * expf(-t * 11.0f) * 1.5f;
+    });
+
+    gSounds[(int)Sfx::RocketLaunch] = Render(0.5f, [lp = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * (0.08f + t * 0.5f);           // fuse, then whoosh
+        return lp * 2.2f * fminf(1.0f, t * 12.0f) * expf(-t * 4.5f);
+    });
+
+    gSounds[(int)Sfx::Explosion] = Render(0.9f, [lp = 0.0f, ph = 0.0f](float t) mutable {
+        lp += (Noise() - lp) * 0.12f;
+        ph += (120.0f * expf(-t * 3.0f) + 30.0f) / kRate;
+        return (lp * 1.6f + Sine(ph) * 0.6f) * expf(-t * 3.2f) * 1.4f;
+    });
+
+    gSounds[(int)Sfx::WeaponUp] = Render(0.45f, [ph = 0.0f](float t) mutable {
+        const float notes[3] = {659.0f, 880.0f, 1318.0f};
+        ph += notes[Step(t, 0.15f, 3)] / kRate;
+        return Square(ph) * 0.3f * expf(-fmodf(t, 0.15f) * 7.0f);
+    });
+
+    gSounds[(int)Sfx::WeaponSwitch] = Render(0.06f, [ph = 0.0f](float t) mutable {
+        ph += 300.0f / kRate;
+        return (Noise() * 0.4f + Square(ph) * 0.3f) * expf(-t * 70.0f);
     });
 
     // The building itself: compressors, a strip light, the till that never sleeps.

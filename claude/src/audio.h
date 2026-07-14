@@ -19,6 +19,11 @@ enum class Sfx {
     Hurt,
     Died,
     Escaped,
+    Scattergun,     // statiegeldkanon
+    RocketLaunch,   // vuurwerkpijl leaves the pipe
+    Explosion,
+    WeaponUp,       // picked up a new gun
+    WeaponSwitch,   // keep last: kSfxCount counts from here
 };
 
 void AudioInit();
