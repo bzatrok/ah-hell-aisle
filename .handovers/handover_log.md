@@ -15,6 +15,7 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 004 | [ah-hell-aisle](../HANDOVER.md) | codex | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `runner-ups/codex/` | 2026-07-13 | — |
 | 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `runner-ups/claude_fable/` | 2026-07-13 | 2026-07-13 |
 | 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | 🔄 in-progress | `web/` | 2026-07-14 | — |
+| 007 | [game-expansion](handover_007_game-expansion.md) | fresh session | Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music | ⬜ pending | `claude/` | 2026-07-14 | — |
 
 > **Arena result (2026-07-14):** `claude/` won and is unlocked for further development.
 > The other implementations were archived under `runner-ups/`.
