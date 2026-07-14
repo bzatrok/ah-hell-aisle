@@ -46,6 +46,14 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > (preview deploy command in the doc's Sequencing §3; flip the JS `SIGN` once if
 > tilting right turns left), then merge to `master` and flip this row ✅.
 
+> **008 revision (2026-07-14, Ben's device verdict):** tilt aim is out — on the real
+> iPhone it didn't feel right. Right-thumb drag now aims (the old motion-off fallback
+> promoted to the only path; permission prompt, gravity pipeline and `SIGN` all gone),
+> and the game is landscape-only: portrait raises the new `web_set_paused` flag and a
+> "draai je telefoon" overlay, rotating back resumes. Headless touch emulation
+> re-verified drag-aim, stick, tap-start and the pause/resume round-trip, zero page
+> errors; preview redeployed. **Remaining:** Ben re-tests on the phone, then merge.
+
 ## Launch lines
 
 Run each from the repo root, in that model's own CLI:
