@@ -8,7 +8,11 @@ enum class PickupKind : int {
     Rookworst,       // +50 health
     Labels,          // +20 label ammo
     Bonuskaart,      // +50 armour
-    Keycard,         // the bedrijfsleider's pass. There is exactly one.
+    Keycard,         // the bedrijfsleider's pass. There is exactly one per level.
+    Flessen,         // +8 flessen (statiegeldkanon ammo)
+    Vuurwerk,        // +4 vuurwerk (vuurwerkpijl ammo)
+    WeaponScatter,   // the statiegeldkanon itself, plus 12 flessen
+    WeaponRocket,    // the vuurwerkpijl itself, plus 4 vuurwerk
 };
 
 struct Pickup {

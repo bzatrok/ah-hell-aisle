@@ -12,6 +12,7 @@
 //   K  keycard door        X  loading dock door  .  floor
 //   @  you                 1  winkelwagen  2  vakkenvuller  3  zelfscanner
 //   a  appelflap  r  rookworst  l  labels  b  bonuskaart  k  the keycard
+//   f  flessen (ammo 3)  v  vuurwerk (ammo 4)  g  statiegeldkanon  p  vuurwerkpijl
 //
 // Read it north-up: the magazijn is the strip along the top, behind the locked
 // door at column 19. You start at the bottom, in front of the checkouts. The
@@ -29,7 +30,7 @@ static const char* const kLevel[Map::H] = {
     "M..l....1.....................1........M",
     "MMMMMMMMMMMMMMMMMMMKMMMMMMMMMMMMMMMMMMMM",
     "#.....3.......................1........#",
-    "#............2.....a....1..............#",
+    "#............2.....a.g..1..............#",
     "#..........................FFFFFFFFFFFFF",
     "#.b.....................l..F....2......F",
     "#...S...S...S...S...s...S..F.....3...k.F",

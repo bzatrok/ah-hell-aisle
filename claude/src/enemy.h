@@ -47,8 +47,12 @@ struct Enemy {
     int frame() const;
 };
 
-// The vakkenvuller's soup can. A real projectile: it flies, it arcs, walls stop it.
+// A real projectile: it flies, walls stop it. The soup can arcs and lands; the
+// vuurwerkpijl flies flat and detonates on anything — wall, shopper or timeout.
 struct Projectile {
+    enum class Kind : unsigned char { SoupCan, Rocket };
+    Kind kind = Kind::SoupCan;
+    bool ownerIsPlayer = false;
     Vector2 pos{};
     Vector2 vel{};
     float height = 0.0f;   // world Y, for the arc

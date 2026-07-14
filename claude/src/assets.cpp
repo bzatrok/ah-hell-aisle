@@ -57,11 +57,18 @@ void AssetsLoad() {
     gAssets.pickup[(int)PickupKind::Labels] = Grab("pickup_labels.png");
     gAssets.pickup[(int)PickupKind::Bonuskaart] = Grab("pickup_bonuskaart.png");
     gAssets.pickup[(int)PickupKind::Keycard] = Grab("pickup_keycard.png");
+    gAssets.pickup[(int)PickupKind::Flessen] = Grab("pickup_flessen.png");
+    gAssets.pickup[(int)PickupKind::Vuurwerk] = Grab("pickup_vuurwerk.png");
+    gAssets.pickup[(int)PickupKind::WeaponScatter] = Grab("pickup_statiegeldkanon.png");
+    gAssets.pickup[(int)PickupKind::WeaponRocket] = Grab("pickup_vuurwerkpijl.png");
 
     gAssets.weapon[(int)WeaponId::Stokbrood] = Grab("weapon_stokbrood.png");
     gAssets.weapon[(int)WeaponId::Prijspistool] = Grab("weapon_prijspistool.png");
+    gAssets.weapon[(int)WeaponId::Statiegeldkanon] = Grab("weapon_statiegeldkanon.png");
+    gAssets.weapon[(int)WeaponId::Vuurwerkpijl] = Grab("weapon_vuurwerkpijl.png");
 
     gAssets.soupCan = Grab("proj_soepblik.png");
+    gAssets.rocket = Grab("proj_vuurwerkpijl.png");
     gAssets.hudPanel = Grab("hud_panel.png");
     gAssets.hudFace = Grab("hud_face.png");
 }
@@ -74,6 +81,7 @@ void AssetsUnload() {
     for (Texture2D& t : gAssets.pickup) UnloadTexture(t);
     for (Texture2D& t : gAssets.weapon) UnloadTexture(t);
     UnloadTexture(gAssets.soupCan);
+    UnloadTexture(gAssets.rocket);
     UnloadTexture(gAssets.hudPanel);
     UnloadTexture(gAssets.hudFace);
 }

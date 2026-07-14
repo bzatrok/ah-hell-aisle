@@ -321,28 +321,69 @@ void EnemiesUpdate(World& w, float dt) {
     KeepApart(w);
 }
 
+// The vuurwerkpijl's blast: linear falloff over the radius, and it does not care
+// who is standing in it — enemies and the shooter alike. Walls shield.
+static void ExplodeRocket(World& w, Vector2 at) {
+    for (Enemy& e : w.enemies) {
+        if (!e.alive()) continue;
+        const float d = Vector2Distance(e.pos, at);
+        if (d > kRocketRadius || !w.map.LineOfSight(at, e.pos)) continue;
+        EnemyHurt(w, e, (int)Lerp((float)kRocketDamageMax, (float)kRocketDamageMin,
+                                  d / kRocketRadius));
+    }
+    const float pd = Vector2Distance(w.player.pos, at);
+    if (pd <= kRocketRadius && w.map.LineOfSight(at, w.player.pos)) {
+        PlayerDamage(w, (int)Lerp((float)kRocketDamageMax, (float)kRocketDamageMin,
+                                  pd / kRocketRadius));
+    }
+    w.shake = fminf(1.2f, w.shake + 0.6f);
+    w.player.muzzleFlash = fmaxf(w.player.muzzleFlash, 0.9f);   // the aisle lights up
+    PlaySfxAt(Sfx::Explosion, pd);
+}
+
+static bool RocketUpdate(World& w, Projectile& p, float dt) {
+    // Flat flight. Detonates on the first wall, the first shopper, or timeout.
+    const Vector2 next = Vector2Add(p.pos, Vector2Scale(p.vel, dt));
+    if (w.map.SolidAt(next) || p.life <= 0.0f) {
+        ExplodeRocket(w, p.pos);
+        return false;
+    }
+    p.pos = next;
+
+    for (const Enemy& e : w.enemies) {
+        if (!e.alive()) continue;
+        if (Vector2Distance(p.pos, e.pos) < StatsFor(e.kind).radius + 0.2f) {
+            ExplodeRocket(w, p.pos);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool SoupCanUpdate(World& w, Projectile& p, float dt) {
+    p.vy -= kCanGravity * dt;
+    p.height += p.vy * dt;
+
+    const Vector2 next = Vector2Add(p.pos, Vector2Scale(p.vel, dt));
+    if (w.map.SolidAt(next)) return false;   // a can does not go through a shelf
+    p.pos = next;
+
+    if (p.height <= 0.05f) return false;     // it fell short
+    if (Vector2Distance(p.pos, w.player.pos) < kPlayerRadius + 0.16f) {
+        PlayerDamage(w, StatsFor(EnemyKind::Vakkenvuller).damage);
+        return false;
+    }
+    return true;
+}
+
 void ProjectilesUpdate(World& w, float dt) {
     for (Projectile& p : w.projectiles) {
         p.life -= dt;
 
-        p.vy -= kCanGravity * dt;
-        p.height += p.vy * dt;
-
-        const Vector2 next = Vector2Add(p.pos, Vector2Scale(p.vel, dt));
-        if (w.map.SolidAt(next)) {          // a can does not go through a shelf
-            p.life = 0.0f;
-            continue;
-        }
-        p.pos = next;
-
-        if (p.height <= 0.05f) {            // it fell short
-            p.life = 0.0f;
-            continue;
-        }
-        if (Vector2Distance(p.pos, w.player.pos) < kPlayerRadius + 0.16f) {
-            PlayerDamage(w, StatsFor(EnemyKind::Vakkenvuller).damage);
-            p.life = 0.0f;
-        }
+        const bool alive = (p.kind == Projectile::Kind::Rocket)
+                               ? RocketUpdate(w, p, dt)
+                               : SoupCanUpdate(w, p, dt);
+        if (!alive) p.life = 0.0f;
     }
 
     w.projectiles.erase(

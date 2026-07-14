@@ -6,14 +6,23 @@
 
 struct World;
 
-enum class WeaponId : int { Stokbrood = 0, Prijspistool = 1 };
+enum class WeaponId : int {
+    Stokbrood = 0,
+    Prijspistool = 1,
+    Statiegeldkanon = 2,
+    Vuurwerkpijl = 3,
+};
+constexpr int kWeaponCount = 4;
 
 struct Player {
     Vector2 pos{};              // world X, world Z
     float yaw = 0.0f;           // radians; 0 looks down +X
     int health = kMaxHealth;
     int armour = 0;
-    int ammo = kStartAmmo;
+    int ammo = kStartAmmo;      // price labels, for the prijspistool
+    int flessen = 0;            // deposit bottles, for the statiegeldkanon
+    int vuurwerk = 0;           // rockets, for the vuurwerkpijl
+    bool hasWeapon[kWeaponCount] = {true, true, false, false};
     bool hasKeycard = false;
 
     WeaponId weapon = WeaponId::Stokbrood;
@@ -36,3 +45,9 @@ struct Player {
 
 void PlayerUpdate(World& w, float dt);
 void PlayerDamage(World& w, int damage);
+
+// The ammo pool a weapon draws from; null for the stokbrood (bread is free).
+int* PlayerAmmoPool(Player& p, WeaponId id);
+inline const int* PlayerAmmoPool(const Player& p, WeaponId id) {
+    return PlayerAmmoPool(const_cast<Player&>(p), id);
+}

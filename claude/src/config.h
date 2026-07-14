@@ -37,6 +37,24 @@ constexpr float kGunAnim     = 0.2f;
 constexpr float kGunSpread   = 0.018f;              // radians, each shot
 constexpr float kGunRange    = 64.0f;               // "unlimited", but bounded by the map
 
+// Slot 3: statiegeldkanon — a bottle-return intake that fires the deposit back.
+constexpr int   kScatterPellets  = 7;
+constexpr int   kScatterDamage   = 6;               // per pellet
+constexpr float kScatterSpread   = 0.09f;           // radians, per pellet
+constexpr float kScatterCooldown = 0.9f;
+constexpr float kScatterAnim     = 0.3f;
+constexpr int   kMaxFlessen      = 50;
+
+// Slot 4: vuurwerkpijl — flat-flying rocket, splash hurts everyone. You included.
+constexpr int   kRocketDamageMax = 80;              // at the blast centre
+constexpr int   kRocketDamageMin = 20;              // at the blast edge
+constexpr float kRocketRadius    = 1.6f;
+constexpr float kRocketSpeed     = 10.0f;
+constexpr float kRocketLaunchH   = 0.6f;
+constexpr float kRocketCooldown  = 1.2f;
+constexpr float kRocketAnim      = 0.35f;
+constexpr int   kMaxVuurwerk     = 20;
+
 // How far the noise of your own weapon wakes the shop up.
 constexpr float kGunNoiseRange   = 11.0f;
 constexpr float kMeleeNoiseRange = 4.5f;

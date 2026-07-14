@@ -32,7 +32,7 @@ struct Door {
 // One character of the authored level that becomes an entity rather than a tile.
 struct Spawn {
     int x, y;
-    char kind;        // '@' player, '1'..'3' enemies, 'a' 'r' 'l' 'b' 'k' pickups
+    char kind;        // '@' player, '1'..'5' enemies, 'a r l b k f v g p' pickups
 };
 
 struct Map {

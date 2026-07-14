@@ -29,6 +29,10 @@ void WorldInit(World& w) {
             case 'l': w.pickups.push_back({PickupKind::Labels, centre, false, 0.0f}); break;
             case 'b': w.pickups.push_back({PickupKind::Bonuskaart, centre, false, 0.0f}); break;
             case 'k': w.pickups.push_back({PickupKind::Keycard, centre, false, 0.0f}); break;
+            case 'f': w.pickups.push_back({PickupKind::Flessen, centre, false, 0.0f}); break;
+            case 'v': w.pickups.push_back({PickupKind::Vuurwerk, centre, false, 0.0f}); break;
+            case 'g': w.pickups.push_back({PickupKind::WeaponScatter, centre, false, 0.0f}); break;
+            case 'p': w.pickups.push_back({PickupKind::WeaponRocket, centre, false, 0.0f}); break;
             default: break;
         }
     }

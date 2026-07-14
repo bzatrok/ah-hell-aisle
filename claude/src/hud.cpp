@@ -61,8 +61,12 @@ void HudDraw(const World& w) {
     const Color healthCol = (p.health < 35) ? kBlood : kInk;
     TextCentred(TextFormat("%d%%", p.health), kCellX[0], top + 32.0f, 36, healthCol);
 
-    const Color ammoCol = (p.weapon == WeaponId::Prijspistool) ? kInk : Color{120, 130, 140, 255};
-    TextCentred(TextFormat("%d", p.ammo), kCellX[1], top + 32.0f, 36, ammoCol);
+    // AMMO shows the selected weapon's reserve; the stokbrood never runs out.
+    if (const int* pool = PlayerAmmoPool(p, p.weapon)) {
+        TextCentred(TextFormat("%d", *pool), kCellX[1], top + 32.0f, 36, kInk);
+    } else {
+        TextCentred("-", kCellX[1], top + 32.0f, 36, Color{120, 130, 140, 255});
+    }
 
     TextCentred(TextFormat("%d%%", p.armour), kCellX[2], top + 32.0f, 36,
                 p.armour > 0 ? kAhBlue : Color{120, 130, 140, 255});
@@ -77,8 +81,9 @@ void HudDraw(const World& w) {
     DrawTexturePro(gAssets.hudFace, {faceFrame * 48.0f, 0, 48, 56},
                    {kScreenW * 0.5f - 37.0f, top + 4.0f, 74.0f, 87.0f}, {0, 0}, 0.0f, WHITE);
 
-    DrawText(p.weapon == WeaponId::Stokbrood ? "1  STOKBROOD" : "2  PRIJSPISTOOL", 18,
-             (int)top - 26, 18, Color{200, 205, 210, 160});
+    static const char* const kWeaponName[kWeaponCount] = {
+        "1  STOKBROOD", "2  PRIJSPISTOOL", "3  STATIEGELDKANON", "4  VUURWERKPIJL"};
+    DrawText(kWeaponName[(int)p.weapon], 18, (int)top - 26, 18, Color{200, 205, 210, 160});
 
     float y = 18.0f;
     for (const HudMessage& m : w.messages) {

@@ -334,12 +334,14 @@ void CollectSprites(const World& w, Vector3 eye, std::vector<Billboard>& out) {
     }
 
     for (const Projectile& p : w.projectiles) {
-        // Centre the can on its flight path rather than hanging it below.
-        const Vector3 at = {p.pos.x, p.height - kCanSize * 0.5f, p.pos.y};
-        out.push_back({gAssets.soupCan,
+        // Centre the projectile on its flight path rather than hanging it below.
+        const bool rocket = p.kind == Projectile::Kind::Rocket;
+        const float size = rocket ? 0.30f : kCanSize;
+        const Vector3 at = {p.pos.x, p.height - size * 0.5f, p.pos.y};
+        out.push_back({rocket ? gAssets.rocket : gAssets.soupCan,
                        {0.0f, 0.0f, 16.0f, 16.0f},
                        at,
-                       {kCanSize, kCanSize},
+                       {size, size},
                        LightFor(w, at, eye),
                        Vector3DistanceSqr(at, eye)});
     }
