@@ -44,16 +44,23 @@
       var canvas = document.getElementById('canvas');
       window.Module = {
         canvas: canvas,
-        onRuntimeInitialized: function () { ready = true; }
+        onRuntimeInitialized: function () {
+          ready = true;
+          // A rotation while the runtime was still loading was dropped by W();
+          // apply the current orientation now that the calls can land.
+          if (applyOrient) applyOrient();
+        }
       };
       var engine = document.createElement('script');
       engine.src = 'game.js';
       document.body.appendChild(engine);
       canvas.focus();
-      // Must happen inside this click: iOS only grants motion permission,
-      // fullscreen and orientation lock from a user gesture.
+      // Must happen inside this click: iOS only grants fullscreen and
+      // orientation lock from a user gesture.
       if (isTouch) initMobile();
     }, { once: true });
+
+    var applyOrient = null;   // assigned by the mobile layer; re-run once wasm is up
 
     if (!isTouch) return;   // desktop: nothing below runs, no DOM changes
 
@@ -61,20 +68,18 @@
 
     var STICK_CLAMP = 64, STICK_DEAD = 8, STICK_FULL = 48;   // CSS px
     var HOLD_MS = 100, MOVE_PX = 12, SWIPE_MS = 350, SWIPE_PX = 48;
-    var LOOK_SENS = 0.0045;                                  // rad per px, drag-look
-    var DEG = Math.PI / 180;
-    var TILT_DEAD = 3 * DEG, TILT_FULL = 25 * DEG, TURN_MAX = 150 * DEG;
+    var LOOK_SENS = 0.0045;                                  // rad per px, drag aim
 
     var touches = {};        // touch identifier -> record
     var stickId = null;      // identifier owning the virtual stick
-    var stickBase, stickNub, hintEl;
-    var motionActive = false;   // a sensor (or __mob) is feeding gravity
-    var ema = null, g0 = null, calib = { x: 0, y: 0, n: 0 }, lastMotion = 0;
-    var lastTilt = 0, lastRate = 0, lastStick = { x: 0, y: 0 };
+    var stickBase, stickNub, rotateEl;
+    var lastStick = { x: 0, y: 0 };
+    var paused = false;      // portrait: rotate overlay up, wasm told to freeze
+    var yawSent = 0;         // cumulative drag-aim rad, for the test seam
 
     document.getElementById('start').innerHTML = '&#9654; tap to start';
     document.querySelector('.hint').textContent =
-      'tilt to steer · left thumb moves · tap fires · swipe switches weapon';
+      'left thumb moves · right thumb aims · tap fires · swipe switches weapon';
 
     var css = document.createElement('style');
     css.textContent =
@@ -83,9 +88,9 @@
       '#stick-base{width:96px;height:96px;margin:-48px 0 0 -48px;' +
         'border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08)}' +
       '#stick-nub{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(255,255,255,.3)}' +
-      '#mob-hint{position:absolute;top:8px;left:50%;transform:translateX(-50%);' +
-        'font-size:.75rem;color:#ccc;background:rgba(0,0,0,.55);padding:2px 10px;' +
-        'border-radius:4px;display:none;pointer-events:none;z-index:3}';
+      '#rotate{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:10px;background:#111;' +
+        'letter-spacing:.05em;text-align:center}';
     document.head.appendChild(css);
 
     function initMobile() {
@@ -93,14 +98,9 @@
       stickBase.className = 'stick'; stickBase.id = 'stick-base';
       stickNub = document.createElement('div');
       stickNub.className = 'stick'; stickNub.id = 'stick-nub';
-      hintEl = document.createElement('div');
-      hintEl.id = 'mob-hint';
-      hintEl.textContent = 'motion aim off — drag to look';
       frame.appendChild(stickBase);
       frame.appendChild(stickNub);
-      frame.appendChild(hintEl);
 
-      startMotion();
       try {
         if (document.documentElement.requestFullscreen) {
           document.documentElement.requestFullscreen().catch(function () {});
@@ -182,10 +182,13 @@
       if (rec.state === 'PENDING' &&
           Math.hypot(cx - rec.x0, cy - rec.y0) > MOVE_PX) {
         clearTimeout(rec.timer);
-        // With motion aim the drag is a weapon swipe; without it, it looks around.
-        rec.state = motionActive ? 'SWIPE' : 'LOOK';
+        rec.state = 'LOOK';   // the right thumb aims while it drags
       }
-      if (rec.state === 'LOOK') W('web_add_yaw', (cx - px) * LOOK_SENS);
+      if (rec.state === 'LOOK') {
+        var d = (cx - px) * LOOK_SENS;
+        yawSent += d;
+        W('web_add_yaw', d);
+      }
     }
 
     function endAction(rec) {
@@ -196,7 +199,7 @@
         W('web_set_fire', 1);   // the firePressed edge lands exactly one shot
         W('web_set_fire', 0);
         W('web_press_use');
-      } else {   // SWIPE, or LOOK (a fast drag still counts as a swipe)
+      } else {   // LOOK — but a fast horizontal flick still counts as a weapon swipe
         var dur = performance.now() - rec.t0;
         var dx = rec.x - rec.x0, dy = rec.y - rec.y0;
         if (dur <= SWIPE_MS && Math.abs(dx) >= SWIPE_PX &&
@@ -260,80 +263,43 @@
       }
     }
 
-    // ---- accelerometer aim: steering-wheel roll -> turn rate ----
+    // ---- landscape gate: portrait shows the rotate overlay and pauses ----
 
-    // Gravity, not Euler angles: deviceorientation gimbal-locks near landscape.
-    // g0 is captured at start (and re-captured on rotation); the signed screen-roll
-    // angle between g0 and the smoothed g is sign-convention-proof — a global
-    // negation of the vector cancels in the products.
-    function feedGravity(x, y, z) {
-      lastMotion = performance.now();
-      if (!motionActive) {
-        motionActive = true;
-        if (hintEl) hintEl.style.display = 'none';
-      }
-      if (!ema) ema = { x: x, y: y, z: z };
-      else {
-        ema.x += 0.25 * (x - ema.x);
-        ema.y += 0.25 * (y - ema.y);
-        ema.z += 0.25 * (z - ema.z);
-      }
-      if (calib) {
-        calib.x += ema.x; calib.y += ema.y; calib.n++;
-        if (calib.n >= 20) { g0 = { x: calib.x / calib.n, y: calib.y / calib.n }; calib = null; }
-        W('web_set_turn_rate', 0);
-        return;
-      }
-      var tilt = Math.atan2(g0.x * ema.y - g0.y * ema.x, g0.x * ema.x + g0.y * ema.y);
-      var mag = Math.min(1, Math.max(0, (Math.abs(tilt) - TILT_DEAD) / (TILT_FULL - TILT_DEAD)));
-      var sign = (screen.orientation && screen.orientation.angle === 270) ? -1 : 1;
-      lastTilt = tilt;
-      lastRate = Math.sign(tilt) * mag * TURN_MAX * sign;
-      W('web_set_turn_rate', lastRate);
-    }
+    rotateEl = document.createElement('div');
+    rotateEl.id = 'rotate';
+    rotateEl.innerHTML =
+      '<div style="font-size:2.4rem">&#8635;</div>' +
+      '<div style="font-size:1.2rem">draai je telefoon</div>' +
+      '<div style="font-size:.8rem;color:#888">landscape only &mdash; het spel wacht wel</div>';
+    document.body.appendChild(rotateEl);
 
-    function motionOff() {
-      if (motionActive) return;
-      if (hintEl) hintEl.style.display = 'block';
-    }
-
-    function startMotion() {
-      if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
-        DeviceMotionEvent.requestPermission().then(function (s) {
-          if (s === 'granted') listenMotion(); else motionOff();
-        }).catch(motionOff);
-      } else if (window.DeviceMotionEvent) {
-        listenMotion();
-      } else {
-        motionOff();
-      }
-      window.addEventListener('orientationchange', function () {
-        ema = null; g0 = null; calib = { x: 0, y: 0, n: 0 };
-        W('web_set_turn_rate', 0);
-      });
-      // Watchdog: a silent sensor must not leave the view spinning.
-      setInterval(function () {
-        if (motionActive && performance.now() - lastMotion > 500) {
-          W('web_set_turn_rate', 0);
+    // Rotating mid-touch strands every finger: kill timers, lifts, stick, fire.
+    function resetTouches() {
+      for (var id in touches) {
+        var rec = touches[id];
+        if (rec.kind === 'action') {
+          clearTimeout(rec.timer);
+          if (rec.state === 'FIRING') W('web_set_fire', 0);
         }
-      }, 250);
-      // API present but mute (desktop emulation, some Androids): fall back.
-      setTimeout(function () { if (!motionActive) motionOff(); }, 1500);
+      }
+      touches = {};
+      if (stickId !== null) endStick();
     }
 
-    function listenMotion() {
-      window.addEventListener('devicemotion', function (e) {
-        var g = e.accelerationIncludingGravity;
-        if (g && g.x != null) feedGravity(g.x, g.y, g.z || 0);
-      });
-    }
+    applyOrient = function () {
+      paused = window.innerHeight > window.innerWidth;
+      rotateEl.style.display = paused ? 'flex' : 'none';
+      if (paused) resetTouches();
+      W('web_set_paused', paused ? 1 : 0);
+    };
+    window.addEventListener('resize', function () { applyOrient(); });
+    window.addEventListener('orientationchange', function () { applyOrient(); });
+    applyOrient();
 
-    // Desktop test seams: feed the gravity pipeline by hand, read the state back.
+    // Desktop test seam: read the mobile layer's state back.
     window.__mob = {
-      setGravity: function (x, y, z) { feedGravity(x, y, z || 0); },
       state: function () {
-        return { ready: ready, motion: motionActive,
-                 tiltDeg: lastTilt / DEG, rateDegPerSec: lastRate / DEG,
+        return { ready: ready, paused: paused, yawSent: yawSent,
                  stickX: lastStick.x, stickY: lastStick.y };
       }
     };
