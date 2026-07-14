@@ -1,0 +1,9 @@
+build/
+*.o
+*.a
+*.so
+*
+!.gitignore
+!README.md
+!CMakeLists.txt
+!src/

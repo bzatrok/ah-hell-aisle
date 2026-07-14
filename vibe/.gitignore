@@ -1,0 +1,12 @@
+build/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.app
+*.xcodeproj
+*.DS_Store
+CMakeCache.txt
+CMakeFiles/

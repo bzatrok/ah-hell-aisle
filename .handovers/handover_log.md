@@ -13,6 +13,7 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 002 | [ah-hell-aisle](../HANDOVER.md) | vibe | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `vibe/` | 2026-07-13 | — |
 | 003 | [ah-hell-aisle](../HANDOVER.md) | claude | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `claude/` | 2026-07-13 | — |
 | 004 | [ah-hell-aisle](../HANDOVER.md) | codex | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `codex/` | 2026-07-13 | — |
+| 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `claude_fable/` | 2026-07-13 | 2026-07-13 |
 
 ## Launch lines
 
