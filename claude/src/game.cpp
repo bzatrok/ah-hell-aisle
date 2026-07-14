@@ -23,7 +23,12 @@ void GameInit(Game& g) {
 }
 
 void GameUpdate(Game& g, float dt) {
-    AudioUpdate(dt, g.state == GameState::Playing);
+    AudioUpdate(dt, g.state == GameState::Playing,
+                g.state == GameState::Title ? -1 : g.world.level);
+
+    if (IsKeyPressed(KEY_M)) {
+        g.world.Message(AudioToggleMusic() ? "MUZIEK AAN" : "MUZIEK UIT");
+    }
 
 #if defined(__EMSCRIPTEN__)
     // In a browser there is no quitting: raylib's web main loop never honours the

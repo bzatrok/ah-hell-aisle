@@ -76,6 +76,21 @@ static bool Notices(const World& w, const Enemy& e, float dist) {
     return dist < StatsFor(e.kind).sight && w.map.LineOfSight(e.pos, w.player.pos);
 }
 
+static void BossIntro(World& w, Enemy& e);
+
+// One bark, the moment it stops being furniture. Deliberately not fired by
+// AlertEnemies: a whole aisle waking to one gunshot should not become a choir.
+static void AlertBark(World& w, Enemy& e) {
+    const float dist = Vector2Distance(e.pos, w.player.pos);
+    switch (e.kind) {
+        case EnemyKind::Winkelwagen:    PlaySfxAt(Sfx::AlertCart, dist); break;
+        case EnemyKind::Vakkenvuller:   PlaySfxAt(Sfx::AlertStocker, dist); break;
+        case EnemyKind::Zelfscanner:    PlaySfxAt(Sfx::AlertScanner, dist); break;
+        case EnemyKind::Beveiliger:     PlaySfxAt(Sfx::AlertGuard, dist); break;
+        case EnemyKind::Bedrijfsleider: BossIntro(w, e); break;   // his own ceremony
+    }
+}
+
 static void BeginAttack(Enemy& e, int shots) {
     e.state = EnemyState::Attack;
     e.stateTimer = 0.0f;
@@ -131,10 +146,18 @@ static void UpdateWinkelwagen(World& w, Enemy& e, float dist, bool los, float dt
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) e.state = EnemyState::Chase;
+            if (Notices(w, e, dist)) {
+                e.state = EnemyState::Chase;
+                AlertBark(w, e);
+            }
             break;
 
         case EnemyState::Chase:
+            e.rattleTimer -= dt;
+            if (e.rattleTimer <= 0.0f && dist < 20.0f) {   // heard before it is seen
+                e.rattleTimer = 0.8f;
+                PlaySfxAt(Sfx::CartRattle, dist);
+            }
             if (dist <= s.attackRange + kPlayerRadius && e.cooldown <= 0.0f && los &&
                 !w.player.dead()) {
                 BeginAttack(e, 1);
@@ -170,7 +193,10 @@ static void UpdateVakkenvuller(World& w, Enemy& e, float dist, bool los, float d
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) e.state = EnemyState::Chase;
+            if (Notices(w, e, dist)) {
+                e.state = EnemyState::Chase;
+                AlertBark(w, e);
+            }
             break;
 
         case EnemyState::Chase: {
@@ -227,7 +253,10 @@ static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) e.state = EnemyState::Chase;
+            if (Notices(w, e, dist)) {
+                e.state = EnemyState::Chase;
+                AlertBark(w, e);
+            }
             break;
 
         case EnemyState::Chase:
@@ -284,7 +313,10 @@ static void UpdateBeveiliger(World& w, Enemy& e, float dist, bool los, float dt)
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) e.state = EnemyState::Chase;
+            if (Notices(w, e, dist)) {
+                e.state = EnemyState::Chase;
+                AlertBark(w, e);
+            }
             break;
 
         case EnemyState::Chase: {
@@ -370,7 +402,7 @@ static void UpdateBedrijfsleider(World& w, Enemy& e, float dist, bool los, float
         case EnemyState::Idle:
             if (Notices(w, e, dist)) {
                 e.state = EnemyState::Chase;
-                BossIntro(w, e);
+                AlertBark(w, e);
             }
             break;
 
@@ -567,7 +599,7 @@ void EnemyHurt(World& w, Enemy& e, int damage) {
     if (e.health > 0) {
         if (e.state == EnemyState::Idle) {
             e.state = EnemyState::Chase;   // that got its attention
-            if (e.kind == EnemyKind::Bedrijfsleider) BossIntro(w, e);
+            AlertBark(w, e);
         }
         return;
     }

@@ -50,6 +50,7 @@ struct Enemy {
     float aimBeam = 0.0f;  // >0 while it is winding up: the telegraph you can dodge
     int phase = 0;         // bedrijfsleider only: 0 = charge, 1 = barrage
     float phaseTimer = 0.0f;
+    float rattleTimer = 0.0f;   // winkelwagen only: paces the chase rattle
 
     bool alive() const { return state != EnemyState::Dying && state != EnemyState::Dead; }
     int frame() const;
