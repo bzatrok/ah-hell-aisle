@@ -1,8 +1,8 @@
 name: Deploy to Cloudflare Pages
 
+# Manual-only for now: deploys are done locally with wrangler. Add a
+# push trigger (and the two CLOUDFLARE_* secrets) to deploy on commit.
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 jobs:
