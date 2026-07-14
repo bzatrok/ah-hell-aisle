@@ -1,0 +1,39 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.2
+          actions-cache-folder: emsdk-cache
+
+      # raylib is cloned and compiled by web/build.sh on first run; cache it
+      # so subsequent deploys skip the ~2 min raylib build.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            web/build/raylib
+            web/build/raylib-build
+          key: raylib-web-6.0-emsdk-6.0.2
+
+      - name: Build
+        run: ./web/build.sh
+
+      # --branch=main because the Pages project's production branch is still
+      # "main" (it predates the rename to master); without it this deploy
+      # would land as a preview instead of production.
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web/dist --project-name=ah-hell-aisle --branch=main
