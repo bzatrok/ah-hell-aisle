@@ -319,9 +319,9 @@ static void UpdateMovement(World& w, float dt) {
     Player& p = w.player;
 
     // On touch devices raylib maps a dragging finger onto the mouse, so mouse-look
-    // would double-steer on top of the injected tilt/drag input.
+    // would double-steer on top of the injected drag-aim input.
     if (!gWebInput.touchMode) p.yaw += GetMouseDelta().x * kMouseSens;
-    p.yaw += gWebInput.turnRate * dt + WebConsumeYawDelta();
+    p.yaw += WebConsumeYawDelta();
     if (IsKeyDown(KEY_LEFT)) p.yaw -= kTurnSpeed * dt;
     if (IsKeyDown(KEY_RIGHT)) p.yaw += kTurnSpeed * dt;
 

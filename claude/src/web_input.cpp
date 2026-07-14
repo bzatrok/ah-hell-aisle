@@ -36,7 +36,7 @@ extern "C" {
 
 EMSCRIPTEN_KEEPALIVE void web_set_touch_mode(int on) { gWebInput.touchMode = on != 0; }
 
-EMSCRIPTEN_KEEPALIVE void web_set_turn_rate(float radPerSec) { gWebInput.turnRate = radPerSec; }
+EMSCRIPTEN_KEEPALIVE void web_set_paused(int on) { gWebInput.paused = on != 0; }
 
 EMSCRIPTEN_KEEPALIVE void web_add_yaw(float rad) { gWebInput.yawDelta += rad; }
 

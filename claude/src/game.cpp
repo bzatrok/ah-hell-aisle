@@ -24,6 +24,13 @@ void GameInit(Game& g) {
 }
 
 void GameUpdate(Game& g, float dt) {
+#if defined(__EMSCRIPTEN__)
+    // A phone held portrait: the shell shows its rotate overlay and raises this
+    // flag. Freeze everything — world, input, even the music feed — until the
+    // phone turns back. The draw underneath the overlay is harmless.
+    if (gWebInput.paused) return;
+#endif
+
     AudioUpdate(dt, g.state == GameState::Playing,
                 g.state == GameState::Title ? -1 : g.world.level);
 

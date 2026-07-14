@@ -3,8 +3,8 @@
 // Native builds compile this too; nothing ever writes it there.
 struct WebInput {
     bool  touchMode = false;   // set once on first touch: disables mouse-look
-    float turnRate  = 0.0f;    // rad/s from tilt; JS refreshes it per sensor event
-    float yawDelta  = 0.0f;    // rad, drag-look fallback; consumed per frame
+    bool  paused    = false;   // phone held portrait: rotate overlay is up, game freezes
+    float yawDelta  = 0.0f;    // rad, right-thumb drag aim; consumed per frame
     float moveX = 0.0f;        // virtual stick, screen-right strafe, |v| <= 1
     float moveY = 0.0f;        // virtual stick, screen-up = forward,  |v| <= 1
     bool  fireDown    = false; // held state
