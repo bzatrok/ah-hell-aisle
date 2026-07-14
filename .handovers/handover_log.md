@@ -16,7 +16,7 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `claude_fable/` | 2026-07-13 | 2026-07-13 |
 | 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | 🔄 in-progress | `web/` | 2026-07-14 | — |
 
-> **006 note (2026-07-14):** built + verified locally (all artifacts serve on :8080, shaders transformed, `claude/`/`assets/` untouched). Pages project `ah-hell-aisle` created. Final deploy blocked on a permission prompt Ben must approve: `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle`. Visual browser check also pending (Chrome extension not connected).
+> **006 note (2026-07-14):** built and visually verified in headless Chrome — title screen, textured world, HUD and movement all render; `claude/`/`assets/` untouched. Fixed an initial black screen: emscripten 6 + `ALLOW_MEMORY_GROWTH` backs the heap with a resizable ArrayBuffer, which Chrome rejects for WebGL texture uploads; `-sGROWABLE_ARRAYBUFFERS=0` restores classic growth. Only the deploy remains, pending Ben's approval: `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle`.
 
 ## Launch lines
 
