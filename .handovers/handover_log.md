@@ -14,6 +14,9 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 003 | [ah-hell-aisle](../HANDOVER.md) | claude | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `claude/` | 2026-07-13 | — |
 | 004 | [ah-hell-aisle](../HANDOVER.md) | codex | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `codex/` | 2026-07-13 | — |
 | 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `claude_fable/` | 2026-07-13 | 2026-07-13 |
+| 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | 🔄 in-progress | `web/` | 2026-07-14 | — |
+
+> **006 note (2026-07-14):** built + verified locally (all artifacts serve on :8080, shaders transformed, `claude/`/`assets/` untouched). Pages project `ah-hell-aisle` created. Final deploy blocked on a permission prompt Ben must approve: `npx wrangler pages deploy web/dist --project-name=ah-hell-aisle`. Visual browser check also pending (Chrome extension not connected).
 
 ## Launch lines
 
