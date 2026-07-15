@@ -148,7 +148,10 @@
     if (RELAY.indexOf('__') === 0) RELAY = '';   // unstamped: no public relay yet
     var wantArena = false, welcomed = false, begun = false;
     var net = { ws: null, myId: 0, hostId: 0, names: {}, colors: {}, scores: {},
-                last: {}, batch: null };
+                last: {}, batch: null,
+                mine: null,        // my last streamed state (test seam)
+                enemies: {},       // last enemy stream rows, sent or received
+                enemyFrames: 0 };  // stream ticks seen, either direction
 
     function relayUrl() {
       if (localStorage.mpRelay) return localStorage.mpRelay;
@@ -194,7 +197,8 @@
       var v = net.names[victimId] || 'IEMAND';
       if (killerId > 0 && net.names[killerId]) {
         net.scores[killerId] = (net.scores[killerId] || 0) + 1;
-        postMsg(net.names[killerId] + ' ☠ ' + v);
+        // ASCII only: the wasm side draws this with raylib's default font.
+        postMsg(net.names[killerId] + ' >> ' + v);
       } else {
         postMsg(v + ' IS DOOR DE WINKEL GEPAKT');
       }
@@ -222,8 +226,10 @@
         if (d.k === 3) onDied(from, d.a);   // Died: names + scores live here
         W('net_event', d.k, from, d.a || 0, d.b || 0, d.c || 0, d.d || 0);
       } else if (d.t === 'E' && d.l) {
+        net.enemyFrames++;
         for (var i = 0; i < d.l.length; i++) {
           var en = d.l[i];
+          net.enemies[en[0]] = en;
           W('net_enemy_state',
             en[0], en[1], en[2], en[3], en[4], en[5], en[6], en[7], en[8]);
         }
@@ -298,6 +304,7 @@
 
     window.__net = {
       state: function (x, y, yaw, h, w, f) {
+        net.mine = { x: x, y: y, yaw: yaw, h: h, f: f };
         wsSend({ t: 's', x: r2(x), y: r2(y),
                  yaw: Math.round(yaw * 1000) / 1000, h: h, w: w, f: f });
       },
@@ -305,9 +312,11 @@
         if (k === 3) onDied(net.myId, a);   // the relay never echoes my own death
         wsSend({ t: 'e', k: k, a: a, b: b, c: c, d: d }, to);
       },
-      enemyBegin: function () { net.batch = []; },
+      enemyBegin: function () { net.batch = []; net.enemyFrames++; },
       enemy: function (idx, kind, x, y, h, st, ax, ay, fl) {
-        net.batch.push([idx, kind, r2(x), r2(y), h, st, r2(ax), r2(ay), fl]);
+        var row = [idx, kind, r2(x), r2(y), h, st, r2(ax), r2(ay), fl];
+        net.enemies[idx] = row;
+        net.batch.push(row);
       },
       enemyFlush: function () {
         if (net.batch && net.batch.length) wsSend({ t: 'E', l: net.batch });
@@ -328,7 +337,10 @@
                  connected: !!(net.ws && net.ws.readyState === 1),
                  names: JSON.parse(JSON.stringify(net.names)),
                  scores: JSON.parse(JSON.stringify(net.scores)),
-                 last: JSON.parse(JSON.stringify(net.last)) };
+                 last: JSON.parse(JSON.stringify(net.last)),
+                 mine: net.mine ? JSON.parse(JSON.stringify(net.mine)) : null,
+                 enemies: JSON.parse(JSON.stringify(net.enemies)),
+                 enemyFrames: net.enemyFrames };
       }
     };
 
