@@ -1,0 +1,8 @@
+# Local development: the relay on ws://localhost:8787, matching the web client's
+# local fallback (web/index.html resolves ws://<hostname>:8787 when not on Pages).
+services:
+  relay:
+    build: .
+    ports:
+      - "8787:8080"
+    restart: unless-stopped
