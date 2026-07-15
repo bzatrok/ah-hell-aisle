@@ -2,6 +2,7 @@
 
 #include "audio.h"
 #include "hud.h"
+#include "net.h"
 #include "raylib.h"
 #include "render.h"
 #include "web_input.h"
@@ -13,6 +14,32 @@ void Restart(Game& g) {
     RenderRebuild(g.world.map);
     g.state = GameState::Playing;
     DisableCursor();
+}
+
+void EnterArena(Game& g) {
+    WorldStartArena(g.world);
+    RenderRebuild(g.world.map);
+    g.state = GameState::Playing;
+    DisableCursor();
+}
+
+// Arena deaths don't end anything: the corpse lies there for a beat (the camera
+// fall PlayerUpdate already plays), then a fresh body walks out of a quiet '@'.
+// gNet.respawnTimer doubles as the just-died edge: 0 means death hasn't been
+// noticed yet, so the Died broadcast fires exactly once per death.
+void UpdateArenaRespawn(World& w, float dt) {
+    if (!w.player.dead()) return;
+
+    if (gNet.respawnTimer <= 0.0f) {
+        NetSendDied(gNet.lastHitBy);
+        gNet.respawnTimer = kNetRespawnDelay;
+    } else {
+        gNet.respawnTimer -= dt;
+        if (gNet.respawnTimer <= 0.0f) {
+            WorldArenaRespawn(w);
+            gNet.respawnTimer = 0.0f;   // armed for the next death
+        }
+    }
 }
 
 }  // namespace
@@ -28,7 +55,9 @@ void GameUpdate(Game& g, float dt) {
     // A phone held portrait: the shell shows its rotate overlay and raises this
     // flag. Freeze everything — world, input, even the music feed — until the
     // phone turns back. The draw underneath the overlay is harmless.
-    if (gWebInput.paused) return;
+    // Except in the arena: a live match waits for nobody (Doom rules), so the
+    // sim runs on and the rotated phone just stands there, vulnerable.
+    if (gWebInput.paused && g.world.mode != Mode::Arena) return;
 #endif
 
     AudioUpdate(dt, g.state == GameState::Playing,
@@ -41,8 +70,10 @@ void GameUpdate(Game& g, float dt) {
 #if defined(__EMSCRIPTEN__)
     // In a browser there is no quitting: raylib's web main loop never honours the
     // exit key, and while the mouse is captured Chrome eats the first Esc to
-    // release pointer lock. So Esc abandons the run and returns to the title.
+    // release pointer lock. So Esc abandons the run and returns to the title —
+    // and from the arena it also hangs up the room.
     if (g.state != GameState::Title && IsKeyPressed(KEY_ESCAPE)) {
+        if (g.world.mode == Mode::Arena) NetLeave();
         g.state = GameState::Title;
         EnableCursor();
         return;
@@ -51,6 +82,12 @@ void GameUpdate(Game& g, float dt) {
 
     switch (g.state) {
         case GameState::Title: {
+            // The shell joined a room and wants the arena — that outranks keys.
+            if (NetConsumeStartRequest()) {
+                EnterArena(g);
+                break;
+            }
+
             // Esc is not "any key": on the web it just brought us here. Neither is
             // M — the title advertises it as the music toggle, and it already did
             // that above.
@@ -64,6 +101,11 @@ void GameUpdate(Game& g, float dt) {
 
         case GameState::Playing:
             WorldUpdate(g.world, dt);
+
+            if (g.world.mode == Mode::Arena) {
+                UpdateArenaRespawn(g.world, dt);
+                break;   // no dock-door ending, no Dead screen — only respawns
+            }
 
             if (g.world.escaped) {
                 if (g.world.level + 1 < kLevelCount) {

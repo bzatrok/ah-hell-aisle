@@ -149,9 +149,15 @@ EM_JS(void, js_net_enemy_flush, (), {
     if (window.__net) __net.enemyFlush();
 });
 
+EM_JS(void, js_net_leave, (), {
+    if (window.__net) __net.leave();
+});
+
 void JsNetState(Vector2 pos, float yaw, int health, int weapon, int flags) {
     js_net_state(pos.x, pos.y, yaw, health, weapon, flags);
 }
+
+void JsNetLeave() { js_net_leave(); }
 
 void JsNetEvent(int to, int type, float a, float b, float c, float d) {
     js_net_event(to, type, a, b, c, d);
@@ -169,6 +175,7 @@ void JsNetEnemyFlush() { js_net_enemy_flush(); }
 #else  // native: the arena is unreachable, the link still needs the symbols
 
 void JsNetState(Vector2, float, int, int, int) {}
+void JsNetLeave() {}
 void JsNetEvent(int, int, float, float, float, float) {}
 void JsNetEnemyBegin() {}
 void JsNetEnemy(int, int, Vector2, int, int, Vector2, int) {}

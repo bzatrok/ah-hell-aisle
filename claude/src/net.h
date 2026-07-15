@@ -104,6 +104,13 @@ inline bool NetArena() { return gNet.active; }
 
 RemotePlayer* NetFindPeer(int id);
 
+// The shell's "enter the arena" edge — consumed by the title screen, like the
+// web_input Consume* family.
+bool NetConsumeStartRequest();
+
+// Local exit (Esc): tell the shell to hang up and forget the room.
+void NetLeave();
+
 // Clears match state for a fresh arena entry; identity (myId/isHost) survives.
 void NetResetMatch();
 

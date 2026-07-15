@@ -222,6 +222,21 @@ RemotePlayer* NetFindPeer(int id) {
     return nullptr;
 }
 
+bool NetConsumeStartRequest() {
+    const bool v = gNet.startRequested;
+    gNet.startRequested = false;
+    return v;
+}
+
+void NetLeave() {
+    if (!gNet.active) return;
+    gNet.active = false;
+    gNet.isHost = false;
+    gNet.peers.clear();
+    NetResetMatch();
+    JsNetLeave();
+}
+
 void NetResetMatch() {
     gNet.inbox.clear();
     gNet.feed.clear();

@@ -161,6 +161,63 @@ static const char* const kLevel3[Map::H] = {
     "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
 };
 
+// ---------------------------------------------------------------------------
+// The arena, "Nachtdienst". Not part of the run: this is the multiplayer floor.
+// Eight spawn corners and edges, a contested statiegeldkanon dead centre, the
+// vuurwerkpijlen locked in two freezer rooms whose doorways face the plaza, and
+// enough gondola cover that no lane is safe to hold. Four trolleys and four
+// scanners come with the building.
+// ---------------------------------------------------------------------------
+static const char* const kArena[Map::H] = {
+    "########################################",
+    "#.@.....M..........rr..........M.....@.#",
+    "#.......M..MM....................M.....#",
+    "#..MM...M..MM...l......l...MM....M.....#",
+    "#..MM......MM..............MM..MM...a..#",
+    "#............................1.........#",
+    "#...a......1...........................#",
+    "#......................................#",
+    "#...SSSSSSSSSS....v.....SSSSSSSSSS.....#",
+    "#......................................#",
+    "#...SSSSSSSSSS...FFF....SSSSSSSSSS..l..#",
+    "#..l..............3....................#",
+    "#...SSSSSSSSSS...FFF....SSSSSSSSSS.....#",
+    "#......................................#",
+    "#.@...................................@#",
+    "#FFFFFF......................FFFFFFFFF.#",
+    "#F....F......................F.......F.#",
+    "#F.p..F.......FF.....FF......F..p....F.#",
+    "#F....F.......FF.....FF......F.......F.#",
+    "#F.3..........f...g...f..........3...F.#",
+    "#F...................................F.#",
+    "#F....F.......FF.....FF......F.......F.#",
+    "#F.b..F.......FF.....FF......F....b..F.#",
+    "#F....F......................F.......F.#",
+    "#FFFFFF......................FFFFFFFFF.#",
+    "#.@...................................@#",
+    "#......................................#",
+    "#...SSSSSSSSSS...FFF....SSSSSSSSSS.....#",
+    "#....................3................l#",
+    "#...SSSSSSSSSS...FFF....SSSSSSSSSS.....#",
+    "#..l...................................#",
+    "#...SSSSSSSSSS....v.....SSSSSSSSSS.....#",
+    "#......................................#",
+    "#...........1.............1......a.....#",
+    "#...CCCC....CCCC....CCCC....CCCC.......#",
+    "#...CCCC....CCCC....CCCC....CCCC...f...#",
+    "#...CCCC....CCCC....CCCC....CCCC.......#",
+    "#..a...................................#",
+    "#.@.....l...........rr...........l...@.#",
+    "########################################",
+};
+
+static Zone ZoneForArena(int x, int y) {
+    if (y <= 6) return Zone::Magazijn;                            // the dock strip
+    if (y >= 33) return Zone::Checkout;                           // the lanes
+    if (y >= 15 && y <= 24 && (x <= 6 || x >= 29)) return Zone::Freezer;
+    return Zone::Store;
+}
+
 static Tile TileFor(char c) {
     switch (c) {
         case '#': return Tile::Plain;
@@ -215,16 +272,16 @@ const char* LevelIntro(int level) {
     return kLevels[ClampLevel(level)].intro;
 }
 
-Map LoadLevel(int level, std::vector<Spawn>& spawns) {
-    const LevelDef& def = kLevels[ClampLevel(level)];
+static Map BuildMap(const char* const* rows, Zone (*zoneFor)(int, int),
+                    std::vector<Spawn>& spawns) {
     Map m;
     spawns.clear();
 
     for (int y = 0; y < Map::H; y++) {
         for (int x = 0; x < Map::W; x++) {
-            const char c = def.rows[y][x];
+            const char c = rows[y][x];
             m.tiles[y][x] = TileFor(c);
-            m.zones[y][x] = def.zoneFor(x, y);
+            m.zones[y][x] = zoneFor(x, y);
 
             if (m.tiles[y][x] == Tile::DoorKeycard || m.tiles[y][x] == Tile::DoorExit) {
                 m.doors.push_back({x, y, m.tiles[y][x] == Tile::DoorExit, false, 0.0f});
@@ -234,6 +291,15 @@ Map LoadLevel(int level, std::vector<Spawn>& spawns) {
         }
     }
     return m;
+}
+
+Map LoadLevel(int level, std::vector<Spawn>& spawns) {
+    const LevelDef& def = kLevels[ClampLevel(level)];
+    return BuildMap(def.rows, def.zoneFor, spawns);
+}
+
+Map LoadArena(std::vector<Spawn>& spawns) {
+    return BuildMap(kArena, ZoneForArena, spawns);
 }
 
 bool Map::Solid(int x, int y) const {

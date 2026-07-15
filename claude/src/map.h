@@ -72,3 +72,7 @@ constexpr int kLevelCount = 3;
 
 Map LoadLevel(int level, std::vector<Spawn>& spawns);
 const char* LevelIntro(int level);
+
+// The multiplayer floor: one arena, outside the solo run's numbering. No keycard,
+// no exit door — nobody leaves, that is the game mode.
+Map LoadArena(std::vector<Spawn>& spawns);
