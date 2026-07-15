@@ -62,6 +62,11 @@ void ApplyFired(World& w, const PendingEvent& ev) {
         case WeaponId::Statiegeldkanon: PlaySfxAt(Sfx::Scattergun, dist); break;
         case WeaponId::Vuurwerkpijl:    PlaySfxAt(Sfx::RocketLaunch, dist); break;
     }
+
+    // A peer's gunfire is noise in the host's shop too.
+    if (gNet.isHost && (WeaponId)(int)ev.a != WeaponId::Stokbrood) {
+        AlertEnemies(w, p->pos, kGunNoiseRange);
+    }
 }
 
 void ApplyDied(const PendingEvent& ev) {
@@ -91,7 +96,9 @@ void ApplyEvents(World& w) {
                 break;
 
             case NetEvent::HitMe:
-                gNet.lastHitBy = ev.from;
+                // b flags the shop's own damage — a trolley the host simulates
+                // must not credit the host player with my death.
+                gNet.lastHitBy = ev.b > 0.5f ? 0 : ev.from;
                 gNet.lastHitByAge = 0.0f;
                 PlayerDamage(w, (int)ev.a);
                 break;
@@ -178,6 +185,54 @@ void HostRespawnPickups(World& w, float dt) {
     }
 }
 
+// The shop restocks its trolleys: one at a time, from the authored '1' spot
+// furthest from anyone living, walking a Dead slot back in so the stream's
+// slot indices never move.
+void HostRespawnTrolleys(World& w, float dt) {
+    gNet.trolleyTimer -= dt;
+    if (gNet.trolleyTimer > 0.0f) return;
+    gNet.trolleyTimer = 12.0f;
+
+    Enemy* slot = nullptr;
+    for (Enemy& e : w.enemies) {
+        if (e.kind == EnemyKind::Winkelwagen && e.state == EnemyState::Dead) {
+            slot = &e;
+            break;
+        }
+    }
+    if (!slot || w.arenaEnemySpawns.empty()) return;
+
+    Vector2 best = w.arenaEnemySpawns[0];
+    float bestScore = -1.0f;
+    for (const Vector2& s : w.arenaEnemySpawns) {
+        float nearest = Vector2Distance(s, w.player.pos);
+        for (const RemotePlayer& p : gNet.peers) {
+            if (p.alive) nearest = fminf(nearest, Vector2Distance(s, p.pos));
+        }
+        if (nearest > bestScore) {
+            bestScore = nearest;
+            best = s;
+        }
+    }
+    *slot = MakeEnemy(EnemyKind::Winkelwagen, best);
+}
+
+// A joiner mid-match sees the full shop; only which pickups are gone needs
+// catching up (enemies converge through the regular stream inside 100 ms).
+void HostSendSnapshots(const World& w) {
+    for (const int joiner : gNet.snapshotQueue) {
+        const int count = (int)w.pickups.size() < kNetMaxPickups
+                              ? (int)w.pickups.size()
+                              : kNetMaxPickups;
+        for (int i = 0; i < count; i++) {
+            if (w.pickups[i].taken) {
+                JsNetEvent(joiner, (int)NetEvent::PickupTaken, (float)i, 0, 0, 0);
+            }
+        }
+    }
+    gNet.snapshotQueue.clear();
+}
+
 // Applies the host's 10 Hz stream to the local puppet enemies. Positions smooth
 // exponentially toward the stream (stateless, good enough at this rate); anim
 // and decay timers tick locally so walk cycles and death frames stay fluid
@@ -252,6 +307,7 @@ void NetResetMatch() {
     gNet.inbox.clear();
     gNet.feed.clear();
     gNet.scoreline.clear();
+    gNet.snapshotQueue.clear();
     for (NetEnemyIn& e : gNet.enemyIn) e = NetEnemyIn{};
     gNet.frags = 0;
     gNet.deaths = 0;
@@ -260,6 +316,8 @@ void NetResetMatch() {
     gNet.lastHitByAge = 0.0f;
     gNet.stateAccum = 0.0f;
     gNet.enemyAccum = 0.0f;
+    gNet.trolleyTimer = 0.0f;
+    gNet.hostArmed = false;
     for (float& t : gNet.pickupTimer) t = 0.0f;
     for (RemotePlayer& p : gNet.peers) {   // roster survives, match state resets
         p.corpseTimer = -1.0f;
@@ -282,9 +340,25 @@ void NetUpdate(World& w, float dt) {
     TickPeers(dt);
 
     if (gNet.isHost) {
+        if (!gNet.hostArmed) {
+            // Fresh host, or just inherited the shop mid-match: give every
+            // already-taken pickup a clock, or it would never come back.
+            gNet.hostArmed = true;
+            const int count = (int)w.pickups.size() < kNetMaxPickups
+                                  ? (int)w.pickups.size()
+                                  : kNetMaxPickups;
+            for (int i = 0; i < count; i++) {
+                if (w.pickups[i].taken && gNet.pickupTimer[i] <= 0.0f) {
+                    gNet.pickupTimer[i] = kNetPickupRespawn;
+                }
+            }
+        }
+        HostSendSnapshots(w);
         HostStreamEnemies(w, dt);
         HostRespawnPickups(w, dt);
+        HostRespawnTrolleys(w, dt);
     } else {
+        gNet.hostArmed = false;
         PuppetEnemies(w, dt);
     }
 
@@ -299,6 +373,11 @@ void NetSendFired(int weaponId) {
 void NetSendHitPlayer(int targetId, int damage) {
     if (!gNet.active) return;
     JsNetEvent(targetId, (int)NetEvent::HitMe, (float)damage, 0, 0, 0);
+}
+
+void NetSendShopHit(int targetId, int damage) {
+    if (!gNet.active) return;
+    JsNetEvent(targetId, (int)NetEvent::HitMe, (float)damage, 1, 0, 0);
 }
 
 void NetSendDied(int killerId) {

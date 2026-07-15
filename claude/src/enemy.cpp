@@ -54,6 +54,44 @@ int Enemy::frame() const {
 
 // --- shared helpers ----------------------------------------------------------
 
+// Who an enemy is hunting this frame: the local player (peerId 0) or one of the
+// other shoppers. `valid` false means nobody living is worth attacking — but the
+// position still points at the freshest corpse, so a chase keeps its bearing and
+// the shop mills around your body exactly as it always did in solo.
+struct Prey {
+    Vector2 pos{};
+    bool valid = false;
+    int peerId = 0;
+};
+
+static Prey AcquirePrey(const World& w, const Enemy& e) {
+    Prey prey{w.player.pos, !w.player.dead(), 0};
+    if (w.mode != Mode::Arena) return prey;
+
+    float best = prey.valid ? Vector2Distance(e.pos, w.player.pos) : 1e30f;
+    for (const RemotePlayer& rp : gNet.peers) {
+        if (!rp.alive) continue;
+        const float d = Vector2Distance(e.pos, rp.pos);
+        if (d < best) {
+            best = d;
+            prey = {rp.pos, true, rp.id};
+        }
+    }
+    return prey;
+}
+
+// Lands a monster's hit on whoever it was hunting. Remote victims apply it to
+// themselves; the shop's damage carries no kill credit (killerId 0), so the host
+// player doesn't collect frags for trolley work.
+static void HurtPrey(World& w, const Prey& prey, int damage) {
+    if (prey.peerId == 0) {
+        PlayerDamage(w, damage);
+    } else {
+        NetSendShopHit(prey.peerId, damage);
+        if (RemotePlayer* rp = NetFindPeer(prey.peerId)) rp->hurtFlash = 1.0f;
+    }
+}
+
 static void Step(World& w, Enemy& e, Vector2 dir, float dt) {
     if (Vector2Length(dir) < 1e-4f) return;
     const EnemyStats& s = StatsFor(e.kind);
@@ -62,19 +100,34 @@ static void Step(World& w, Enemy& e, Vector2 dir, float dt) {
     const Vector2 want = w.map.SlideMove(e.pos, delta, s.radius);
 
     // You are an obstacle, not a bumper. A charging trolley stops dead against you and
-    // swings — it does not shovel you down the aisle.
+    // swings — it does not shovel you down the aisle. Every living body counts.
     const float minDist = s.radius + kPlayerRadius;
-    const float after = Vector2Distance(want, w.player.pos);
-    if (after >= minDist || after >= Vector2Distance(e.pos, w.player.pos)) {
-        e.pos = want;
+    bool blocked = false;
+    {
+        const float after = Vector2Distance(want, w.player.pos);
+        if (after < minDist && after < Vector2Distance(e.pos, w.player.pos)) {
+            blocked = true;
+        }
     }
+    if (w.mode == Mode::Arena) {
+        for (const RemotePlayer& rp : gNet.peers) {
+            if (blocked) break;
+            if (!rp.alive) continue;
+            const float after = Vector2Distance(want, rp.pos);
+            if (after < minDist && after < Vector2Distance(e.pos, rp.pos)) {
+                blocked = true;
+            }
+        }
+    }
+    if (!blocked) e.pos = want;
 
     e.animTimer += dt;
     if (e.animTimer >= kWalkFrameTime * 2.0f) e.animTimer = 0.0f;
 }
 
-static bool Notices(const World& w, const Enemy& e, float dist) {
-    return dist < StatsFor(e.kind).sight && w.map.LineOfSight(e.pos, w.player.pos);
+static bool Notices(const World& w, const Enemy& e, const Prey& prey, float dist) {
+    return prey.valid && dist < StatsFor(e.kind).sight &&
+           w.map.LineOfSight(e.pos, prey.pos);
 }
 
 static void BossIntro(World& w, Enemy& e);
@@ -108,23 +161,23 @@ static void EndAttack(Enemy& e) {
 
 // The frozen-ray shot. Aim locks when the attack starts, so during the windup the
 // telegraphed line stays put and stepping out of it is a real dodge. The shot then
-// tests the player against a corridor around that ray, not their live position.
-static void FreezeAim(const World& w, Enemy& e) {
-    e.aimDir = Vector2Normalize(Vector2Subtract(w.player.pos, e.pos));
+// tests the prey against a corridor around that ray, not their live position.
+static void FreezeAim(Enemy& e, const Prey& prey) {
+    e.aimDir = Vector2Normalize(Vector2Subtract(prey.pos, e.pos));
 }
 
-static bool FrozenRayHits(const World& w, const Enemy& e, float range) {
-    const Vector2 to = Vector2Subtract(w.player.pos, e.pos);
+static bool FrozenRayHits(const Enemy& e, const Prey& prey, float range) {
+    const Vector2 to = Vector2Subtract(prey.pos, e.pos);
     const float along = Vector2DotProduct(to, e.aimDir);
     const float perp2 = Vector2DotProduct(to, to) - along * along;
     const float halfW = kPlayerRadius + 0.12f;
     return along > 0.0f && along <= range && perp2 <= halfW * halfW;
 }
 
-// Lob a soup can at the player, `angleOffset` radians off the direct line. The
-// arc is tuned to land where the player stands now.
-static void ThrowCan(World& w, const Enemy& e, float angleOffset) {
-    const Vector2 toPlayer = Vector2Subtract(w.player.pos, e.pos);
+// Lob a soup can at the prey, `angleOffset` radians off the direct line. The
+// arc is tuned to land where they stand now.
+static void ThrowCan(World& w, const Enemy& e, const Prey& prey, float angleOffset) {
+    const Vector2 toPlayer = Vector2Subtract(prey.pos, e.pos);
     const float d = fmaxf(0.5f, Vector2Length(toPlayer));
     const float angle = atan2f(toPlayer.y, toPlayer.x) + angleOffset;
     const Vector2 dir = {cosf(angle), sinf(angle)};
@@ -142,12 +195,13 @@ static void ThrowCan(World& w, const Enemy& e, float angleOffset) {
 // Sees you, picks up speed, and does not stop. Thirty health: it dies to one swing
 // and a bit, but it will be on you before you have finished the swing.
 
-static void UpdateWinkelwagen(World& w, Enemy& e, float dist, bool los, float dt) {
+static void UpdateWinkelwagen(World& w, Enemy& e, const Prey& prey, float dist,
+                              bool los, float dt) {
     const EnemyStats& s = StatsFor(e.kind);
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) {
+            if (Notices(w, e, prey, dist)) {
                 e.state = EnemyState::Chase;
                 AlertBark(w, e);
             }
@@ -160,19 +214,19 @@ static void UpdateWinkelwagen(World& w, Enemy& e, float dist, bool los, float dt
                 PlaySfxAt(Sfx::CartRattle, dist);
             }
             if (dist <= s.attackRange + kPlayerRadius && e.cooldown <= 0.0f && los &&
-                !w.player.dead()) {
+                prey.valid) {
                 BeginAttack(e, 1);
                 break;
             }
-            Step(w, e, Vector2Subtract(w.player.pos, e.pos), dt);
+            Step(w, e, Vector2Subtract(prey.pos, e.pos), dt);
             break;
 
         case EnemyState::Attack:
             e.stateTimer += dt;
             if (e.shotsLeft > 0 && e.stateTimer >= 0.16f) {
                 e.shotsLeft = 0;
-                if (Vector2Distance(e.pos, w.player.pos) <= s.attackRange + kPlayerRadius + 0.2f) {
-                    PlayerDamage(w, s.damage);
+                if (Vector2Distance(e.pos, prey.pos) <= s.attackRange + kPlayerRadius + 0.2f) {
+                    HurtPrey(w, prey, s.damage);
                 }
             }
             if (e.stateTimer >= 0.42f) EndAttack(e);
@@ -188,20 +242,21 @@ static void UpdateWinkelwagen(World& w, Enemy& e, float dist, bool los, float dt
 // run, backs off if you charge, sidesteps otherwise so the cans come from a
 // different angle each time.
 
-static void UpdateVakkenvuller(World& w, Enemy& e, float dist, bool los, float dt) {
+static void UpdateVakkenvuller(World& w, Enemy& e, const Prey& prey, float dist,
+                               bool los, float dt) {
     const EnemyStats& s = StatsFor(e.kind);
-    const Vector2 toPlayer = Vector2Subtract(w.player.pos, e.pos);
+    const Vector2 toPlayer = Vector2Subtract(prey.pos, e.pos);
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) {
+            if (Notices(w, e, prey, dist)) {
                 e.state = EnemyState::Chase;
                 AlertBark(w, e);
             }
             break;
 
         case EnemyState::Chase: {
-            if (los && dist < s.attackRange && e.cooldown <= 0.0f && !w.player.dead()) {
+            if (los && dist < s.attackRange && e.cooldown <= 0.0f && prey.valid) {
                 BeginAttack(e, 1);
                 break;
             }
@@ -233,7 +288,7 @@ static void UpdateVakkenvuller(World& w, Enemy& e, float dist, bool los, float d
             e.stateTimer += dt;
             if (e.shotsLeft > 0 && e.stateTimer >= 0.34f) {   // the wind-up you can read
                 e.shotsLeft = 0;
-                ThrowCan(w, e, 0.0f);
+                ThrowCan(w, e, prey, 0.0f);
                 PlaySfxAt(Sfx::CanThrow, dist);
             }
             if (e.stateTimer >= 0.62f) EndAttack(e);
@@ -248,31 +303,32 @@ static void UpdateVakkenvuller(World& w, Enemy& e, float dist, bool los, float d
 // Barely moves. Paints you with a targeting line for a beat before the burst, so
 // standing in an open aisle is a decision and not an accident.
 
-static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt) {
+static void UpdateZelfscanner(World& w, Enemy& e, const Prey& prey, float dist,
+                              bool los, float dt) {
     const EnemyStats& s = StatsFor(e.kind);
     constexpr float kWindup = 1.0f;
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) {
+            if (Notices(w, e, prey, dist)) {
                 e.state = EnemyState::Chase;
                 AlertBark(w, e);
             }
             break;
 
         case EnemyState::Chase:
-            if (los && dist < s.attackRange && e.cooldown <= 0.0f && !w.player.dead()) {
+            if (los && dist < s.attackRange && e.cooldown <= 0.0f && prey.valid) {
                 BeginAttack(e, 3);
-                FreezeAim(w, e);
+                FreezeAim(e, prey);
                 break;
             }
-            if (dist > 7.0f) Step(w, e, Vector2Subtract(w.player.pos, e.pos), dt);
+            if (dist > 7.0f) Step(w, e, Vector2Subtract(prey.pos, e.pos), dt);
             break;
 
         case EnemyState::Attack:
             e.stateTimer += dt;
 
-            if (!los || w.player.dead()) {   // you broke the beam: it has to start again
+            if (!los || !prey.valid) {   // you broke the beam: it has to start again
                 EndAttack(e);
                 e.cooldown = 0.6f;
                 break;
@@ -290,8 +346,8 @@ static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt
                 e.shotTimer = 0.14f;
                 e.beam = 0.09f;
                 // A miss is still loud: the beam and the shriek fire either way.
-                if (los && FrozenRayHits(w, e, s.attackRange + 1.0f)) {
-                    PlayerDamage(w, s.damage);
+                if (los && FrozenRayHits(e, prey, s.attackRange + 1.0f)) {
+                    HurtPrey(w, prey, s.damage);
                 }
                 PlaySfxAt(Sfx::EnemyShoot, dist);
             }
@@ -308,22 +364,23 @@ static void UpdateZelfscanner(World& w, Enemy& e, float dist, bool los, float dt
 // sidearm cools, then paints you for half a second and fires one frozen-ray shot —
 // the zelfscanner's mechanic on legs.
 
-static void UpdateBeveiliger(World& w, Enemy& e, float dist, bool los, float dt) {
+static void UpdateBeveiliger(World& w, Enemy& e, const Prey& prey, float dist,
+                             bool los, float dt) {
     const EnemyStats& s = StatsFor(e.kind);
     constexpr float kWindup = 0.5f;
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) {
+            if (Notices(w, e, prey, dist)) {
                 e.state = EnemyState::Chase;
                 AlertBark(w, e);
             }
             break;
 
         case EnemyState::Chase: {
-            if (los && dist < s.attackRange && e.cooldown <= 0.0f && !w.player.dead()) {
+            if (los && dist < s.attackRange && e.cooldown <= 0.0f && prey.valid) {
                 BeginAttack(e, 1);
-                FreezeAim(w, e);
+                FreezeAim(e, prey);
                 break;
             }
 
@@ -334,7 +391,7 @@ static void UpdateBeveiliger(World& w, Enemy& e, float dist, bool los, float dt)
             }
 
             Vector2 wish;
-            const Vector2 toPlayer = Vector2Subtract(w.player.pos, e.pos);
+            const Vector2 toPlayer = Vector2Subtract(prey.pos, e.pos);
             if (dist > 6.0f || !los) {
                 wish = toPlayer;                                   // advance
             } else {
@@ -352,7 +409,7 @@ static void UpdateBeveiliger(World& w, Enemy& e, float dist, bool los, float dt)
         case EnemyState::Attack:
             e.stateTimer += dt;
 
-            if (!los || w.player.dead()) {   // you broke his line: he re-aims
+            if (!los || !prey.valid) {   // you broke his line: he re-aims
                 EndAttack(e);
                 e.cooldown = 0.8f;
                 break;
@@ -367,8 +424,8 @@ static void UpdateBeveiliger(World& w, Enemy& e, float dist, bool los, float dt)
             if (e.shotsLeft > 0) {
                 e.shotsLeft = 0;
                 e.beam = 0.09f;
-                if (los && FrozenRayHits(w, e, s.attackRange + 1.0f)) {
-                    PlayerDamage(w, s.damage);
+                if (los && FrozenRayHits(e, prey, s.attackRange + 1.0f)) {
+                    HurtPrey(w, prey, s.damage);
                 }
                 PlaySfxAt(Sfx::GuardShot, dist);
             }
@@ -396,12 +453,13 @@ static void BossIntro(World& w, Enemy& e) {
     e.phaseTimer = kBossChargeTime;
 }
 
-static void UpdateBedrijfsleider(World& w, Enemy& e, float dist, bool los, float dt) {
+static void UpdateBedrijfsleider(World& w, Enemy& e, const Prey& prey, float dist,
+                                 bool los, float dt) {
     const EnemyStats& s = StatsFor(e.kind);
 
     switch (e.state) {
         case EnemyState::Idle:
-            if (Notices(w, e, dist)) {
+            if (Notices(w, e, prey, dist)) {
                 e.state = EnemyState::Chase;
                 AlertBark(w, e);
             }
@@ -417,12 +475,12 @@ static void UpdateBedrijfsleider(World& w, Enemy& e, float dist, bool los, float
             if (e.phase == 0) {
                 // Charge: winkelwagen logic, at scale.
                 if (dist <= s.attackRange + kPlayerRadius && e.cooldown <= 0.0f && los &&
-                    !w.player.dead()) {
+                    prey.valid) {
                     BeginAttack(e, 1);
                     break;
                 }
-                Step(w, e, Vector2Subtract(w.player.pos, e.pos), dt);
-            } else if (los && e.cooldown <= 0.0f && !w.player.dead()) {
+                Step(w, e, Vector2Subtract(prey.pos, e.pos), dt);
+            } else if (los && e.cooldown <= 0.0f && prey.valid) {
                 // Barrage: stand and throw. The fan launches from the Attack state.
                 BeginAttack(e, 3);
             }
@@ -434,9 +492,9 @@ static void UpdateBedrijfsleider(World& w, Enemy& e, float dist, bool los, float
                 // The contact hit, exactly like the trolley's.
                 if (e.shotsLeft > 0 && e.stateTimer >= 0.16f) {
                     e.shotsLeft = 0;
-                    if (Vector2Distance(e.pos, w.player.pos) <=
+                    if (Vector2Distance(e.pos, prey.pos) <=
                         s.attackRange + kPlayerRadius + 0.2f) {
-                        PlayerDamage(w, s.damage);
+                        HurtPrey(w, prey, s.damage);
                     }
                 }
                 if (e.stateTimer >= 0.42f) EndAttack(e);
@@ -445,7 +503,7 @@ static void UpdateBedrijfsleider(World& w, Enemy& e, float dist, bool los, float
                 if (e.shotsLeft > 0 && e.stateTimer >= 0.3f) {
                     e.shotsLeft = 0;
                     for (const float off : {-15.0f * DEG2RAD, 0.0f, 15.0f * DEG2RAD}) {
-                        ThrowCan(w, e, off);
+                        ThrowCan(w, e, prey, off);
                     }
                     PlaySfxAt(Sfx::CanThrow, dist);
                 }
@@ -505,15 +563,16 @@ void EnemiesUpdate(World& w, float dt) {
             continue;
         }
 
-        const float dist = Vector2Distance(e.pos, w.player.pos);
-        const bool los = w.map.LineOfSight(e.pos, w.player.pos);
+        const Prey prey = AcquirePrey(w, e);
+        const float dist = Vector2Distance(e.pos, prey.pos);
+        const bool los = w.map.LineOfSight(e.pos, prey.pos);
 
         switch (e.kind) {
-            case EnemyKind::Winkelwagen:    UpdateWinkelwagen(w, e, dist, los, dt); break;
-            case EnemyKind::Vakkenvuller:   UpdateVakkenvuller(w, e, dist, los, dt); break;
-            case EnemyKind::Zelfscanner:    UpdateZelfscanner(w, e, dist, los, dt); break;
-            case EnemyKind::Beveiliger:     UpdateBeveiliger(w, e, dist, los, dt); break;
-            case EnemyKind::Bedrijfsleider: UpdateBedrijfsleider(w, e, dist, los, dt); break;
+            case EnemyKind::Winkelwagen:    UpdateWinkelwagen(w, e, prey, dist, los, dt); break;
+            case EnemyKind::Vakkenvuller:   UpdateVakkenvuller(w, e, prey, dist, los, dt); break;
+            case EnemyKind::Zelfscanner:    UpdateZelfscanner(w, e, prey, dist, los, dt); break;
+            case EnemyKind::Beveiliger:     UpdateBeveiliger(w, e, prey, dist, los, dt); break;
+            case EnemyKind::Bedrijfsleider: UpdateBedrijfsleider(w, e, prey, dist, los, dt); break;
         }
     }
 

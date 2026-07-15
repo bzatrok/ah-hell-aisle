@@ -163,6 +163,9 @@ void WorldStartArena(World& w) {
         if (s.kind == '@') {
             w.arenaSpawns.push_back({s.x + 0.5f, s.y + 0.5f});
         } else {
+            if (s.kind == '1') {   // remember the docks the trolleys restock from
+                w.arenaEnemySpawns.push_back({s.x + 0.5f, s.y + 0.5f});
+            }
             SpawnEntity(w, s);
         }
     }

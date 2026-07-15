@@ -25,7 +25,8 @@ struct World {
     std::vector<Enemy> enemies;
     std::vector<Pickup> pickups;
     std::vector<Projectile> projectiles;
-    std::vector<Vector2> arenaSpawns;   // the arena's '@' set: respawn candidates
+    std::vector<Vector2> arenaSpawns;        // the arena's '@' set: respawn candidates
+    std::vector<Vector2> arenaEnemySpawns;   // the '1' set: where trolleys restock
 
     int level = 0;             // index into the run, 0-based
     int kills = 0;             // all three accumulate across levels: the

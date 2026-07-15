@@ -37,6 +37,8 @@ EMSCRIPTEN_KEEPALIVE void net_peer_join(int id, int colorIdx) {
     p.id = id;
     p.colorIdx = (unsigned char)colorIdx;
     gNet.peers.push_back(p);
+    // The host owes every joiner the current pickup state (NetUpdate sends it).
+    if (gNet.isHost) gNet.snapshotQueue.push_back(id);
 }
 
 EMSCRIPTEN_KEEPALIVE void net_peer_left(int id) {

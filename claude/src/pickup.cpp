@@ -4,6 +4,7 @@
 
 #include "audio.h"
 #include "config.h"
+#include "net.h"
 #include "raymath.h"
 #include "world.h"
 
@@ -113,6 +114,9 @@ void PickupsUpdate(World& w, float dt) {
         if (!Consume(w, p.kind)) continue;
 
         p.taken = true;
+        if (w.mode == Mode::Arena) {
+            NetOnLocalPickupTaken((int)(&p - w.pickups.data()));
+        }
         PlaySfx(voice);
         w.player.muzzleFlash = fmaxf(w.player.muzzleFlash, 0.45f);   // the pickup flash
     }

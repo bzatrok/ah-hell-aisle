@@ -44,9 +44,9 @@ struct RemotePlayer {
 // web/index.html mirrors these numbers — change them together.
 enum class NetEvent : int {
     Fired = 0,          // a=weaponId                        anyone -> everyone
-    HitMe = 1,          // a=damage                          shooter -> victim
+    HitMe = 1,          // a=damage, b=1: the shop did it    shooter/host -> victim
     EnemyHit = 2,       // a=enemyIdx, b=damage              shooter -> host
-    Died = 3,           // a=killerId                        victim -> everyone
+    Died = 3,           // a=killerId (0 = the shop)         victim -> everyone
     PickupTaken = 4,    // a=pickupIdx                       taker -> everyone
     PickupRespawn = 5,  // a=pickupIdx                       host -> everyone
     Rocket = 6,         // a,b=pos c,d=vel                   shooter -> everyone
@@ -98,6 +98,9 @@ struct NetState {
     float stateAccum = 0.0f;     // paces my 15 Hz state stream
     float enemyAccum = 0.0f;     // paces the host's 10 Hz enemy stream
     float pickupTimer[kNetMaxPickups] = {};   // host: countdown to respawn
+    float trolleyTimer = 0.0f;   // host: paces winkelwagen restocking
+    bool hostArmed = false;      // host duties initialised (fresh or inherited)
+    std::vector<int> snapshotQueue;   // host: joiners owed the pickup state
 };
 
 extern NetState gNet;
@@ -127,6 +130,7 @@ void NetUpdate(World& w, float dt);
 // outbound vocabulary. All no-ops outside the arena.
 void NetSendFired(int weaponId);
 void NetSendHitPlayer(int targetId, int damage);
+void NetSendShopHit(int targetId, int damage);   // a monster's hit: no kill credit
 void NetSendDied(int killerId);
 void NetSendRocket(Vector2 pos, Vector2 vel);
 
