@@ -1,0 +1,29 @@
+# AH: Hell Aisle relay on the shared-Caddy Hetzner box (AMB-HZ-001).
+#
+# Unlike docker-compose.prod.yml (which brings its own Caddy for standalone TLS),
+# this variant has NO web server of its own: it joins the box's `shared-network`
+# and the box's shared Caddy terminates TLS and reverse-proxies
+#   wss://relay.amberglass.co  ->  ah-relay-app:8080
+# (the vhost lives in Amberglass.Infra's shared Caddyfile).
+#
+# Deploy with ../server/deploy.sh (rsync this dir to /opt/ah-relay on the box,
+# then `docker compose -f docker-compose.hetzner.yml up -d --build`).
+services:
+  ah-relay-app:
+    build: .
+    image: ah-relay:local
+    container_name: ah-relay-app
+    restart: unless-stopped
+    environment:
+      # The aspnet base image already defaults to 8080; pinned here so the Caddy
+      # vhost target (ah-relay-app:8080) is unambiguous.
+      ASPNETCORE_HTTP_PORTS: "8080"
+    expose:
+      - "8080"
+    networks:
+      - shared-network
+
+networks:
+  shared-network:
+    external: true
+    name: shared-network
