@@ -51,5 +51,9 @@ python3 -m http.server 8080 -d web/dist
 # two browser tabs → http://localhost:8080 → ARENA, same kamercode
 ```
 
-The public site has no relay yet: `RELAY_URL=wss://…` at build time wires one in
-(`web/build.sh`), which is the deferred hosting round.
+The public arena is live: `web/build.sh` stamps
+`RELAY_URL=wss://relay.amberglass.co` — the .NET relay runs on a Hetzner host
+behind a shared Caddy reverse proxy (grey-cloud DNS → Let's Encrypt). Ship arena
+changes by rebuilding + redeploying Pages; the relay only needs a redeploy when
+`server/` changes (`server/deploy.sh`, `docker-compose.hetzner.yml`). Host-specific
+details (box, IP, proxy config) live in private infra, not here.

@@ -90,6 +90,16 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > (`server/docker-compose.prod.yml` is ready) plus a `RELAY_URL` rebuild/redeploy,
 > which is what turns the public ARENA button on.
 
+> **010 hosting round done (2026-07-15):** public arena is live. The relay runs on an
+> existing Hetzner host behind a shared Caddy (not a fresh VM) at
+> `wss://relay.amberglass.co` (grey-cloud DNS, Let's Encrypt); page rebuilt with
+> `RELAY_URL` (`47c1939`) and redeployed to Pages. Verified with a real two-browser
+> join over the public relay — roster, movement, 8 shared enemies at 0.00 drift
+> (`scratchpad/verify_public.js`). One snag en route: the shared Caddy's graceful
+> reload loaded the vhost but didn't provision the cert (a known bind-mount reload
+> quirk on that host) — a `--force-recreate` of the Caddy container fixed it. The
+> host-side vhost config lives in that host's private infra repo, not here.
+
 ## Launch lines
 
 Run each from the repo root, in that model's own CLI:

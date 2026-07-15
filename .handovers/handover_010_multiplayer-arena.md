@@ -76,12 +76,38 @@ the names) and writes into `net_msg_buf` via `stringToUTF8`
 - `verify_touch.js` solo-mobile regression: fully green (menu button `#btn-solo`).
 - Native cmake build + `dotnet build server` + `./web/build.sh`: clean.
 
+## Hosting round — DONE ✅ (2026-07-15)
+
+The public arena went live this session. Rather than a fresh VM, the relay landed
+on an existing Hetzner host as one more app behind a **shared Caddy** reverse proxy
+(reusing that host's established app pattern), not the bundled
+`docker-compose.prod.yml`/Caddy shape (that stays for a standalone host).
+
+- Relay: `server/docker-compose.hetzner.yml` (relay-only, joins the host's shared
+  Docker network, exposes 8080); deploy via `server/deploy.sh` (rsync + build).
+- Front: shared-Caddy vhost `relay.amberglass.co → ah-relay-app:8080` (WebSocket
+  upgrade passes through untouched). DNS **grey-cloud** A record → the host,
+  Caddy auto-TLS (Let's Encrypt).
+- Page: `RELAY_URL=wss://relay.amberglass.co ./web/build.sh`, redeployed to Pages.
+- Verified: real two-browser join over the public relay (roster, movement, 8 shared
+  enemies at 0.00 drift) — `scratchpad/verify_public.js`, `mp_public.png`.
+- **Cloudflare answer:** the orange-cloud proxy does support `wss://`, but the host's
+  existing apps are all grey-cloud with Caddy doing Let's Encrypt directly, so the
+  relay matches that (grey). Orange would need a CF origin cert + has a ~100 s idle
+  WebSocket cut; grey has neither.
+- **Gotcha hit + fixed:** the shared Caddy's graceful reload loaded the vhost into
+  HTTP routing but didn't trigger cert provisioning (a known bind-mount reload quirk
+  on that host). Fix was a `--force-recreate` of the Caddy container — a ~3 s blip,
+  then the cert issued cleanly.
+- The shared-Caddy vhost config lives in that host's private infra repo (outside
+  this game repo) — recorded and maintained there.
+
 ## Remaining (future rounds, not this one)
 
-1. **Hosting round:** Hetzner VM, `server/docker-compose.prod.yml` + Caddy, stamp
-   `RELAY_URL` into the page, redeploy Pages.
-2. Balance after real play (trolley respawn pace, scanner lanes, spawn table).
-3. Nice-to-haves parked: name tags over heads, scoreboard key, co-op campaign mode.
+1. Balance after real play (trolley respawn pace, scanner lanes, spawn table).
+2. Nice-to-haves parked: name tags over heads, scoreboard key, co-op campaign mode.
+3. The relay is single-instance on a home-adjacent box; if it gets real traffic,
+   revisit (health checks, a second instance, or a managed host).
 
 ---
 **On completion:** log row 010 set to ✅ done (2026-07-15) — done in this session.
