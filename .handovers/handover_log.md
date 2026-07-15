@@ -81,6 +81,15 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > **Remaining:** Ben's local two-tab pass, merge call, and the separate hosting round
 > (Hetzner + wss) before the arena reaches the public site.
 
+> **010 closed (2026-07-15, Ben waived the local pass — "verified is good enough"):**
+> `feature/multiplayer-arena` merged to `master` as `e3f3884` (no-ff, matching 007/008).
+> Both suites re-ran green against the bundle built from that exact commit, and the
+> deploy went to production: e3f3884 live at ah-hell-aisle.pages.dev, smoke-checked
+> (solo boots and renders; ARENA without a relay degrades to "geen relay
+> geconfigureerd"). **Still open:** only the hosting round — a public wss relay
+> (`server/docker-compose.prod.yml` is ready) plus a `RELAY_URL` rebuild/redeploy,
+> which is what turns the public ARENA button on.
+
 ## Launch lines
 
 Run each from the repo root, in that model's own CLI:
