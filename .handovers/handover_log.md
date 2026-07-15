@@ -33,6 +33,37 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > expansion code on `main`), and is **independent of 008**. It works on the permanent fork
 > branch `korona`, which never merges back to `main`.
 
+> **008 note (2026-07-14):** all code and docs done on `feature/mobile-controls`
+> (unmerged); native + web builds green; desktop and touch-emulation acceptance pass
+> (Puppeteer `hasTouch` run: tap = one shot, hold autofires, swipe cycles owned slots
+> both ways with wrap, 8-way stick, tilt deadzone/full-rate/sign checks via `__mob`,
+> desktop DOM untouched, zero page errors). One deviation from the doc's exact edit:
+> the fire condition's `IsMouseButtonDown` is also gated behind `!touchMode` — raylib
+> merges touch state into mouse buttons (rcore.c), so the stick finger would autofire
+> otherwise; same rationale as the doc's own `GetMouseDelta` gate. Tap-restart on the
+> dead/escaped screens shares the title path's `WebConsumeFirePressed` (verified in
+> code; not exercised live in emulation). **Remaining:** the Ben-only real-iPhone pass
+> (preview deploy command in the doc's Sequencing §3; flip the JS `SIGN` once if
+> tilting right turns left), then merge to `master` and flip this row ✅.
+
+> **008 revision (2026-07-14, Ben's device verdict):** tilt aim is out — on the real
+> iPhone it didn't feel right. Right-thumb drag now aims (the old motion-off fallback
+> promoted to the only path; permission prompt, gravity pipeline and `SIGN` all gone),
+> and the game is landscape-only: portrait raises the new `web_set_paused` flag and a
+> "draai je telefoon" overlay, rotating back resumes. Headless touch emulation
+> re-verified drag-aim, stick, tap-start and the pause/resume round-trip, zero page
+> errors; preview redeployed. **Remaining:** Ben re-tests on the phone, then merge.
+
+> **008 round 2 (2026-07-14, Ben's second device pass):** three fixes. The 16:9 frame
+> is now bounded by viewport height too (landscape cut the HUD off the bottom); the
+> right thumb gets its own floating stick visual while aiming; and the portrait pause
+> that worked in emulation but not on the phone is pinned on Safari serving the *old*
+> cached wasm without `web_set_paused` — every asset URL now carries a `?v=<build-id>`
+> stamped by `web/build.sh`, and orientation is re-checked on `pageshow`/
+> `visibilitychange` for tabs iOS thaws already rotated. Headless suite green
+> (frame ≤ viewport, drag-aim, right-stick show/hide, pause round-trip, 0 errors).
+> **Remaining:** unchanged — Ben's phone pass, then merge.
+
 ## Launch lines
 
 Run each from the repo root, in that model's own CLI:

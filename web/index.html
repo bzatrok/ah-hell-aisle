@@ -10,7 +10,13 @@
     font-family: ui-monospace, Menlo, Consolas, monospace; }
   body { display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 12px; }
-  .frame { position: relative; width: min(1280px, 100vw); aspect-ratio: 16 / 9; }
+  /* The height term keeps the 16:9 frame inside the viewport — sized by width
+     alone, a phone in landscape pushes the HUD row off the bottom of the screen.
+     60px reserves room for the hint line + gap below; the touch layer, which
+     hides the hint, overrides this width to use the full viewport height. */
+  .frame { position: relative; aspect-ratio: 16 / 9;
+    width: min(1280px, 100vw, calc((100vh - 60px) * 16 / 9));
+    width: min(1280px, 100vw, calc((100dvh - 60px) * 16 / 9)); }
   canvas { width: 100%; height: 100%; display: block; max-width: 100%;
     image-rendering: pixelated; background: #000; }
   #start { position: absolute; inset: 0; display: flex; align-items: center;
@@ -26,15 +32,355 @@
   </div>
   <p class="hint">Esc releases the mouse &mdash; Esc again returns to the title screen.</p>
   <script>
+  (function () {
+    // Stamped by web/build.sh. Safari clings to cached game.js/.wasm/.data long
+    // after index.html changes — versioning every asset URL forces fresh fetches.
+    var BUILD = '__BUILD_ID__';
+    var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    var frame = document.querySelector('.frame');
+    var ready = false;
+
+    // Every injected input goes through the web_input shim's exported setters.
+    // Guarded: touches can arrive while the wasm runtime is still loading.
+    function W(name) {
+      if (!ready) return;
+      var fn = window.Module && Module['_' + name];
+      if (fn) fn.apply(null, Array.prototype.slice.call(arguments, 1));
+    }
+
     document.getElementById('start').addEventListener('click', function () {
       this.remove();
       var canvas = document.getElementById('canvas');
-      window.Module = { canvas: canvas };
+      window.Module = {
+        canvas: canvas,
+        locateFile: function (p) { return p + '?v=' + BUILD; },
+        onRuntimeInitialized: function () {
+          ready = true;
+          // A rotation while the runtime was still loading was dropped by W();
+          // apply the current orientation now that the calls can land.
+          if (applyOrient) applyOrient();
+        }
+      };
       var engine = document.createElement('script');
-      engine.src = 'game.js';
+      engine.src = 'game.js?v=' + BUILD;
       document.body.appendChild(engine);
       canvas.focus();
+      // Must happen inside this click: iOS only grants fullscreen and
+      // orientation lock from a user gesture.
+      if (isTouch) initMobile();
     }, { once: true });
+
+    var applyOrient = null;   // assigned by the mobile layer; re-run once wasm is up
+
+    if (!isTouch) return;   // desktop: nothing below runs, no DOM changes
+
+    // ---- mobile touch layer -------------------------------------------------
+
+    var STICK_CLAMP = 64, STICK_DEAD = 8, STICK_FULL = 48;   // CSS px
+    var HOLD_MS = 100, MOVE_PX = 12, SWIPE_MS = 350, SWIPE_PX = 48;
+    var LOOK_SENS = 0.0045;                                  // rad per px, drag aim
+
+    var touches = {};        // touch identifier -> record
+    var stickId = null;      // identifier owning the virtual stick
+    var stickBase, stickNub, stickBaseR, stickNubR, rotateEl;
+    var rStickOn = false;    // an action touch is wearing the right-stick visual
+    var fireCount = 0;       // fingers currently held in FIRING
+    var lastFire = 0;        // last value sent to web_set_fire, for the test seam
+    var lastStick = { x: 0, y: 0 };
+    var paused = false;      // portrait: rotate overlay up, wasm told to freeze
+    var yawSent = 0;         // cumulative drag-aim rad, for the test seam
+
+    var startEl = document.getElementById('start');
+    startEl.style.flexDirection = 'column';
+    startEl.innerHTML = '<div>&#9654; tap to start</div>' +
+      '<div style="font-size:.85rem;color:#888;margin-top:8px">' +
+      'left thumb moves &middot; right thumb aims<br>' +
+      'tap fires &middot; swipe switches weapon</div>';
+
+    var css = document.createElement('style');
+    css.textContent =
+      // The hint line below the frame costs vertical room the phone doesn't
+      // have; its content moved into the start overlay above, so the frame
+      // may reclaim the 60px the desktop rule reserves for it.
+      '.hint{display:none}' +
+      '.frame{touch-action:none;-webkit-user-select:none;user-select:none;' +
+        'width:min(1280px,100vw,calc(100vh*16/9));' +
+        'width:min(1280px,100vw,calc(100dvh*16/9))}' +
+      '.stick{position:absolute;border-radius:50%;pointer-events:none;display:none;z-index:3}' +
+      '#stick-base,#stick-base-r{width:96px;height:96px;margin:-48px 0 0 -48px;' +
+        'border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08)}' +
+      '#stick-nub,#stick-nub-r{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(255,255,255,.3)}' +
+      '#rotate{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:10px;background:#111;' +
+        'letter-spacing:.05em;text-align:center}';
+    document.head.appendChild(css);
+
+    function initMobile() {
+      stickBase = document.createElement('div');
+      stickBase.className = 'stick'; stickBase.id = 'stick-base';
+      stickNub = document.createElement('div');
+      stickNub.className = 'stick'; stickNub.id = 'stick-nub';
+      stickBaseR = document.createElement('div');
+      stickBaseR.className = 'stick'; stickBaseR.id = 'stick-base-r';
+      stickNubR = document.createElement('div');
+      stickNubR.className = 'stick'; stickNubR.id = 'stick-nub-r';
+      frame.appendChild(stickBase);
+      frame.appendChild(stickNub);
+      frame.appendChild(stickBaseR);
+      frame.appendChild(stickNubR);
+
+      try {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(function () {});
+        }
+      } catch (e) {}
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(function () {});
+        }
+      } catch (e) {}
+
+      frame.addEventListener('touchstart', onTouchStart, { passive: false });
+      frame.addEventListener('touchmove', onTouchMove, { passive: false });
+      frame.addEventListener('touchend', onTouchEnd, { passive: false });
+      frame.addEventListener('touchcancel', onTouchCancel, { passive: false });
+    }
+
+    // ---- virtual stick (left half) ----
+
+    function placeStick(base, nub, bx, by, nx, ny) {
+      base.style.display = nub.style.display = 'block';
+      var rect = frame.getBoundingClientRect();
+      base.style.left = (bx - rect.left) + 'px';
+      base.style.top = (by - rect.top) + 'px';
+      nub.style.left = (nx - rect.left) + 'px';
+      nub.style.top = (ny - rect.top) + 'px';
+    }
+
+    function sendMove(x, y) {
+      lastStick.x = x; lastStick.y = y;
+      W('web_set_move', x, y);
+    }
+
+    function startStick(id, cx, cy) {
+      if (stickId !== null) { touches[id] = { kind: 'dead' }; return; }
+      stickId = id;
+      touches[id] = { kind: 'stick', bx: cx, by: cy };
+      placeStick(stickBase, stickNub, cx, cy, cx, cy);
+      sendMove(0, 0);
+    }
+
+    function moveStick(rec, cx, cy) {
+      var dx = cx - rec.bx, dy = cy - rec.by;
+      var len = Math.hypot(dx, dy);
+      var vis = Math.min(len, STICK_CLAMP);
+      var ux = len > 0 ? dx / len : 0, uy = len > 0 ? dy / len : 0;
+      placeStick(stickBase, stickNub, rec.bx, rec.by, rec.bx + ux * vis, rec.by + uy * vis);
+      if (len <= STICK_DEAD) { sendMove(0, 0); return; }
+      var sx = dx / STICK_FULL, sy = -dy / STICK_FULL;   // screen-up = forward
+      var sLen = Math.hypot(sx, sy);
+      if (sLen > 1) { sx /= sLen; sy /= sLen; }
+      sendMove(sx, sy);
+    }
+
+    function endStick() {
+      stickId = null;
+      stickBase.style.display = stickNub.style.display = 'none';
+      sendMove(0, 0);
+    }
+
+    // ---- tap / hold / swipe (right half) ----
+
+    function startAction(id, cx, cy) {
+      var rec = { kind: 'action', state: 'PENDING',
+                  t0: performance.now(), x0: cx, y0: cy, x: cx, y: cy, timer: 0,
+                  bx: cx, by: cy, stick: false };
+      if (!rStickOn) {   // the first right-half finger wears the aim-stick visual
+        rStickOn = rec.stick = true;
+        placeStick(stickBaseR, stickNubR, cx, cy, cx, cy);
+      }
+      rec.timer = setTimeout(function () {
+        if (rec.state === 'PENDING') {
+          rec.state = 'FIRING';           // held: autofire until the finger lifts
+          fireCount++;
+          sendFire(1);
+          W('web_press_use');
+        }
+      }, HOLD_MS);
+      touches[id] = rec;
+    }
+
+    function moveAction(rec, cx, cy) {
+      var px = rec.x;
+      rec.x = cx; rec.y = cy;
+      if (rec.state === 'PENDING' &&
+          Math.hypot(cx - rec.x0, cy - rec.y0) > MOVE_PX) {
+        clearTimeout(rec.timer);
+        rec.state = 'LOOK';   // the right thumb aims while it drags
+      }
+      if (rec.state === 'LOOK') {
+        var d = (cx - px) * LOOK_SENS;
+        yawSent += d;
+        W('web_add_yaw', d);
+      }
+      if (rec.stick) {
+        // The nub rides the finger; past the rim the base drifts after it, so a
+        // long aim drag doesn't strand the visual back at the touch-down point.
+        var dx = cx - rec.bx, dy = cy - rec.by, len = Math.hypot(dx, dy);
+        if (len > STICK_CLAMP) {
+          rec.bx += dx * (1 - STICK_CLAMP / len);
+          rec.by += dy * (1 - STICK_CLAMP / len);
+        }
+        placeStick(stickBaseR, stickNubR, rec.bx, rec.by, cx, cy);
+      }
+    }
+
+    function hideRStick(rec) {
+      if (!rec.stick) return;
+      rec.stick = false; rStickOn = false;
+      stickBaseR.style.display = stickNubR.style.display = 'none';
+    }
+
+    function sendFire(on) {
+      lastFire = on;
+      W('web_set_fire', on);
+    }
+
+    function endAction(rec) {
+      clearTimeout(rec.timer);
+      hideRStick(rec);
+      // web_set_fire is one global flag: only drop it once no held finger is
+      // left, or finger B's tap would silence finger A's autofire mid-burst.
+      if (rec.state === 'FIRING') {
+        fireCount--;
+        if (fireCount === 0) sendFire(0);
+      } else if (rec.state === 'PENDING') {
+        sendFire(1);            // the firePressed edge lands exactly one shot
+        if (fireCount === 0) sendFire(0);
+        W('web_press_use');
+      } else {   // LOOK — but a fast horizontal flick still counts as a weapon swipe
+        var dur = performance.now() - rec.t0;
+        var dx = rec.x - rec.x0, dy = rec.y - rec.y0;
+        if (dur <= SWIPE_MS && Math.abs(dx) >= SWIPE_PX &&
+            Math.abs(dx) >= 2 * Math.abs(dy)) {
+          W('web_cycle_weapon', dx > 0 ? 1 : -1);   // swipe right = next
+        }
+      }
+    }
+
+    // ---- touch routing ----
+
+    function onTouchStart(e) {
+      e.preventDefault();
+      W('web_set_touch_mode', 1);   // idempotent; survives pre-runtime touches
+      var rect = frame.getBoundingClientRect();
+      for (var i = 0; i < e.changedTouches.length; i++) {
+        var t = e.changedTouches[i];
+        if (t.clientX - rect.left < rect.width / 2) {
+          startStick(t.identifier, t.clientX, t.clientY);
+        } else {
+          startAction(t.identifier, t.clientX, t.clientY);
+        }
+      }
+    }
+
+    function onTouchMove(e) {
+      e.preventDefault();
+      for (var i = 0; i < e.changedTouches.length; i++) {
+        var t = e.changedTouches[i];
+        var rec = touches[t.identifier];
+        if (!rec) continue;
+        if (rec.kind === 'stick') moveStick(rec, t.clientX, t.clientY);
+        else if (rec.kind === 'action') moveAction(rec, t.clientX, t.clientY);
+      }
+    }
+
+    function onTouchEnd(e) {
+      e.preventDefault();
+      for (var i = 0; i < e.changedTouches.length; i++) {
+        var id = e.changedTouches[i].identifier;
+        var rec = touches[id];
+        if (!rec) continue;
+        if (rec.kind === 'stick') endStick();
+        else if (rec.kind === 'action') endAction(rec);
+        delete touches[id];
+      }
+    }
+
+    function onTouchCancel(e) {
+      e.preventDefault();
+      for (var i = 0; i < e.changedTouches.length; i++) {
+        var id = e.changedTouches[i].identifier;
+        var rec = touches[id];
+        if (!rec) continue;
+        if (rec.kind === 'stick') endStick();
+        else if (rec.kind === 'action') {   // cancelled touches never tap-fire
+          clearTimeout(rec.timer);
+          hideRStick(rec);
+          if (rec.state === 'FIRING') {
+            fireCount--;
+            if (fireCount === 0) sendFire(0);
+          }
+        }
+        delete touches[id];
+      }
+    }
+
+    // ---- landscape gate: portrait shows the rotate overlay and pauses ----
+
+    rotateEl = document.createElement('div');
+    rotateEl.id = 'rotate';
+    rotateEl.innerHTML =
+      '<div style="font-size:2.4rem">&#8635;</div>' +
+      '<div style="font-size:1.2rem">draai je telefoon</div>' +
+      '<div style="font-size:.8rem;color:#888">landscape only &mdash; het spel wacht wel</div>';
+    document.body.appendChild(rotateEl);
+
+    // Rotating away or hiding the page mid-touch strands every finger: kill
+    // timers, lifts, sticks, fire. The trailing resets are unconditional — a
+    // touchend iOS swallowed can orphan a record out of `touches`, and this is
+    // the only healer for the ownership flags it took with it.
+    function resetTouches() {
+      for (var id in touches) {
+        var rec = touches[id];
+        if (rec.kind === 'action') clearTimeout(rec.timer);
+      }
+      touches = {};
+      if (stickId !== null) endStick();
+      rStickOn = false;
+      if (stickBaseR) stickBaseR.style.display = stickNubR.style.display = 'none';
+      fireCount = 0;
+      sendFire(0);
+    }
+
+    applyOrient = function () {
+      paused = window.innerHeight > window.innerWidth;
+      rotateEl.style.display = paused ? 'flex' : 'none';
+      if (paused) resetTouches();
+      W('web_set_paused', paused ? 1 : 0);
+    };
+    window.addEventListener('resize', function () { applyOrient(); });
+    window.addEventListener('orientationchange', function () { applyOrient(); });
+    // iOS can thaw a suspended tab in a new orientation without firing either
+    // event above — re-check whenever the page comes back to the foreground.
+    // Going hidden mid-touch can swallow the touchend outright (leaving
+    // autofire latched with no finger down), so hiding resets everything.
+    window.addEventListener('pageshow', function () { applyOrient(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) resetTouches();
+      else applyOrient();
+    });
+    applyOrient();
+
+    // Desktop test seam: read the mobile layer's state back.
+    window.__mob = {
+      state: function () {
+        return { ready: ready, paused: paused, yawSent: yawSent,
+                 stickX: lastStick.x, stickY: lastStick.y,
+                 fireCount: fireCount, lastFire: lastFire };
+      }
+    };
+  })();
   </script>
 </body>
 </html>
