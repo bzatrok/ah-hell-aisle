@@ -4,6 +4,7 @@
 
 #include "assets.h"
 #include "config.h"
+#include "net.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "world.h"
@@ -40,6 +41,7 @@ void Dim(unsigned char alpha) {
 void HudDraw(const World& w) {
     const Player& p = w.player;
     const float top = kScreenH - kHudH;
+    const bool arena = w.mode == Mode::Arena;
 
     // Damage flash and the freezer's chill, over the world but under the furniture.
     if (p.hurtFlash > 0.0f) {
@@ -55,7 +57,9 @@ void HudDraw(const World& w) {
                    {0, 0}, 0.0f, WHITE);
 
     for (int i = 0; i < 4; i++) {
-        TextCentred(kCellLabel[i], kCellX[i], top + 10.0f, 14, Color{120, 130, 140, 255});
+        // The arena has no keycard; its fourth cell counts frags instead.
+        const char* label = (arena && i == 3) ? "FRAGS" : kCellLabel[i];
+        TextCentred(label, kCellX[i], top + 10.0f, 14, Color{120, 130, 140, 255});
     }
 
     const Color healthCol = (p.health < 35) ? kBlood : kInk;
@@ -71,11 +75,15 @@ void HudDraw(const World& w) {
     TextCentred(TextFormat("%d%%", p.armour), kCellX[2], top + 32.0f, 36,
                 p.armour > 0 ? kAhBlue : Color{120, 130, 140, 255});
 
-    // The pass shows as a ghost until you are actually carrying it.
-    const Rectangle keySrc = {0, 0, 32, 32};
-    const Rectangle keyDst = {kCellX[3] - 26.0f, top + 34.0f, 52.0f, 52.0f};
-    DrawTexturePro(gAssets.pickup[(int)PickupKind::Keycard], keySrc, keyDst, {0, 0}, 0.0f,
-                   p.hasKeycard ? WHITE : Color{255, 255, 255, 28});
+    if (arena) {
+        TextCentred(TextFormat("%d", gNet.frags), kCellX[3], top + 32.0f, 36, kInk);
+    } else {
+        // The pass shows as a ghost until you are actually carrying it.
+        const Rectangle keySrc = {0, 0, 32, 32};
+        const Rectangle keyDst = {kCellX[3] - 26.0f, top + 34.0f, 52.0f, 52.0f};
+        DrawTexturePro(gAssets.pickup[(int)PickupKind::Keycard], keySrc, keyDst, {0, 0},
+                       0.0f, p.hasKeycard ? WHITE : Color{255, 255, 255, 28});
+    }
 
     const int faceFrame = p.dead() ? 2 : (p.health < 50 ? 1 : 0);
     DrawTexturePro(gAssets.hudFace, {faceFrame * 48.0f, 0, 48, 56},
@@ -90,6 +98,24 @@ void HudDraw(const World& w) {
         const unsigned char alpha = (unsigned char)(Clamp(m.life / 1.2f, 0.0f, 1.0f) * 235.0f);
         TextCentred(m.text.c_str(), kScreenW * 0.5f, y, 20, Color{235, 238, 242, alpha});
         y += 26.0f;
+    }
+
+    if (!arena) return;
+
+    // The standings, composed by the shell (it owns the names), top-right.
+    if (!gNet.scoreline.empty()) {
+        const int tw = MeasureText(gNet.scoreline.c_str(), 18);
+        DrawText(gNet.scoreline.c_str(), kScreenW - 18 - tw, 14, 18,
+                 Color{200, 205, 210, 200});
+    }
+
+    // Down between the schappen: no Dead screen in the arena, just the wait.
+    if (p.dead()) {
+        Dim(120);
+        TextCentred("GEPAKT", kScreenW * 0.5f, 260.0f, 64, kBlood);
+        TextCentred(TextFormat("TERUG IN DE WINKEL OVER %d",
+                               (int)ceilf(fmaxf(gNet.respawnTimer, 0.0f))),
+                    kScreenW * 0.5f, 340.0f, 24, Color{200, 205, 210, 220});
     }
 }
 
