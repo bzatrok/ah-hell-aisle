@@ -15,7 +15,7 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 004 | [ah-hell-aisle](../HANDOVER.md) | codex | Doom 2 clone in an Albert Heijn, per SPEC.md | ⬜ pending | `runner-ups/codex/` | 2026-07-13 | — |
 | 005 | [ah-hell-aisle](../HANDOVER.md) | claude_fable | Doom 2 clone in an Albert Heijn, per SPEC.md | ✅ done | `runner-ups/claude_fable/` | 2026-07-13 | 2026-07-13 |
 | 006 | [web-wasm-claude](handover_006_web-wasm-claude.md) | fresh Claude session | WASM build of claude/ game, deployed to Cloudflare Pages | ✅ done | `web/` | 2026-07-14 | 2026-07-14 |
-| 008 | [mobile-touch-controls](handover_008_mobile-touch-controls.md) | fresh session | Mobile web controls: tap fire/use, swipe weapons, tilt aim, virtual stick | 🔄 in-progress | `claude/src` + `web/` | 2026-07-14 | — |
+| 008 | [mobile-touch-controls](handover_008_mobile-touch-controls.md) | fresh session | Mobile web controls: tap fire/use, swipe weapons, tilt aim, virtual stick | ✅ done | `claude/src` + `web/` | 2026-07-14 | 2026-07-15 |
 | 007 | [game-expansion](handover_007_game-expansion.md) | fresh session | Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music | ✅ done | `claude/` | 2026-07-14 | 2026-07-14 |
 | 009 | [korona-parliament-fork](handover_009_korona-parliament-fork.md) | fresh session | Fork: Hungarian Parliament re-theme, regalia weapons, fictional cast | ⬜ pending | branch `korona`: `claude/` + `assets/` + `tools/` | 2026-07-14 | — |
 
@@ -63,6 +63,12 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > `visibilitychange` for tabs iOS thaws already rotated. Headless suite green
 > (frame ≤ viewport, drag-aim, right-stick show/hide, pause round-trip, 0 errors).
 > **Remaining:** unchanged — Ben's phone pass, then merge.
+
+> **008 closed (2026-07-15, Ben's go-ahead):** `feature/mobile-controls` merged to
+> `master` as `2fac689` (no-ff, matching 007's merge). The headless suite re-ran green
+> against the bundle built from that exact commit (BUILD `2fac689`, 0 page errors).
+> Production web deploy is a separate Ben-gated step; until it runs, production stays
+> on the 007 build and the newest controls live at mobile-preview.ah-hell-aisle.pages.dev.
 
 ## Launch lines
 
