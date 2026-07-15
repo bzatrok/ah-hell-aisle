@@ -43,17 +43,21 @@ em++ -std=c++17 -O2 claude/src/*.cpp \
   -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 \
   -sALLOW_MEMORY_GROWTH=1 \
   -sGROWABLE_ARRAYBUFFERS=0 \
+  -sEXPORTED_RUNTIME_METHODS=stringToUTF8 \
   --preload-file assets@assets \
   -o "$DIST/game.js"
 # Version-stamp the shell page: index.html's BUILD appends ?v= to every asset
 # URL, so Safari's stubbornly cached game.js/.wasm/.data get refetched per build.
 # A dirty tree gets a timestamp too — consecutive dirty builds would otherwise
 # share one id and Safari would serve the previous build against a phone again.
+# RELAY_URL (optional env, e.g. wss://mp.example.com) wires the arena's relay
+# into the page; left unset, the page only reaches a relay on localhost/LAN.
 BUILD_ID="$(git describe --always --dirty 2>/dev/null || echo dev)"
 case "$BUILD_ID" in
   *-dirty|dev) BUILD_ID="$BUILD_ID.$(date +%s)" ;;
 esac
-sed "s/__BUILD_ID__/$BUILD_ID/g" web/index.html > "$DIST/index.html"
+sed -e "s/__BUILD_ID__/$BUILD_ID/g" \
+    -e "s|__RELAY_URL__|${RELAY_URL:-}|g" web/index.html > "$DIST/index.html"
 
 echo "Build complete:"
 ls -lh "$DIST"

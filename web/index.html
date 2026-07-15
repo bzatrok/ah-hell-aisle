@@ -19,16 +19,35 @@
     width: min(1280px, 100vw, calc((100dvh - 60px) * 16 / 9)); }
   canvas { width: 100%; height: 100%; display: block; max-width: 100%;
     image-rendering: pixelated; background: #000; }
-  #start { position: absolute; inset: 0; display: flex; align-items: center;
-    justify-content: center; background: rgba(0, 0, 0, 0.85); cursor: pointer;
-    font-size: 1.4rem; letter-spacing: 0.05em; user-select: none; }
+  #start { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: rgba(0, 0, 0, 0.85); font-size: 1.4rem;
+    letter-spacing: 0.05em; user-select: none; }
+  #start button { font: inherit; font-size: 1.2rem; letter-spacing: 0.06em;
+    background: #14283c; color: #eee; border: 1px solid #37536e;
+    padding: 10px 0; border-radius: 4px; cursor: pointer; width: 240px; }
+  #start button:hover { background: #1d3b58; }
+  #mp-row { display: flex; gap: 8px; }
+  #start input { font: inherit; font-size: 0.95rem; background: #101010;
+    color: #ddd; border: 1px solid #333; padding: 6px 8px; width: 112px;
+    text-transform: uppercase; text-align: center; }
+  #start-hint { font-size: 0.8rem; color: #888; text-align: center;
+    line-height: 1.5; }
   .hint { font-size: 0.85rem; color: #888; }
 </style>
 </head>
 <body>
   <div class="frame">
     <canvas id="canvas" width="1280" height="720" tabindex="0"></canvas>
-    <div id="start">&#9654; click to start</div>
+    <div id="start">
+      <button id="btn-solo">&#9654; solo</button>
+      <button id="btn-arena">&#9876; arena</button>
+      <div id="mp-row">
+        <input id="mp-name" maxlength="10" placeholder="naam" autocomplete="off">
+        <input id="mp-room" maxlength="6" placeholder="kamer" autocomplete="off">
+      </div>
+      <div id="start-hint"></div>
+    </div>
   </div>
   <p class="hint">Esc releases the mouse &mdash; Esc again returns to the title screen.</p>
   <script>
@@ -48,8 +67,21 @@
       if (fn) fn.apply(null, Array.prototype.slice.call(arguments, 1));
     }
 
-    document.getElementById('start').addEventListener('click', function () {
-      this.remove();
+    // ---- start menu ---------------------------------------------------------
+
+    var startEl = document.getElementById('start');
+    var hintEl = document.getElementById('start-hint');
+    var nameEl = document.getElementById('mp-name');
+    var roomEl = document.getElementById('mp-room');
+    hintEl.innerHTML = isTouch
+      ? 'left thumb moves &middot; right thumb aims<br>' +
+        'tap fires &middot; swipe switches weapon'
+      : 'arena: zelfde kamercode = zelfde winkel';
+    nameEl.value = localStorage.mpName || '';
+    roomEl.value = (new URLSearchParams(location.search).get('room') ||
+                    localStorage.mpRoom || '').toUpperCase();
+
+    function bootEngine() {
       var canvas = document.getElementById('canvas');
       window.Module = {
         canvas: canvas,
@@ -57,20 +89,248 @@
         onRuntimeInitialized: function () {
           ready = true;
           // A rotation while the runtime was still loading was dropped by W();
-          // apply the current orientation now that the calls can land.
+          // apply the current orientation now that the calls can land. Same for
+          // an arena welcome that beat the wasm boot.
           if (applyOrient) applyOrient();
+          tryBegin();
         }
       };
       var engine = document.createElement('script');
       engine.src = 'game.js?v=' + BUILD;
       document.body.appendChild(engine);
       canvas.focus();
+    }
+
+    function begin(arena) {
+      if (arena) {
+        var name = (nameEl.value.trim() || 'KLANT').slice(0, 10).toUpperCase();
+        var room = (roomEl.value.trim() || 'AH1').slice(0, 6).toUpperCase();
+        localStorage.mpName = name;
+        localStorage.mpRoom = room;
+        if (!relayUrl()) {
+          hintEl.textContent =
+            'geen relay geconfigureerd — lokaal: start server/ (zie README)';
+          return;
+        }
+        wantArena = true;
+        connect(room, name);
+        if (history.replaceState) {
+          history.replaceState(null, '', '?room=' + encodeURIComponent(room));
+        }
+      }
+      startEl.remove();
+      bootEngine();
       // Must happen inside this click: iOS only grants fullscreen and
       // orientation lock from a user gesture.
       if (isTouch) initMobile();
-    }, { once: true });
+    }
+    document.getElementById('btn-solo').addEventListener('click', function () {
+      begin(false);
+    });
+    document.getElementById('btn-arena').addEventListener('click', function () {
+      begin(true);
+    });
+    roomEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') begin(true);
+    });
+    nameEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') begin(true);
+    });
 
     var applyOrient = null;   // assigned by the mobile layer; re-run once wasm is up
+
+    // ---- arena net client ---------------------------------------------------
+    // The wasm sim speaks through window.__net (EM_JS in web_net.cpp) and the
+    // Module._net_* exports; the WebSocket, the roster and the names live here.
+    // Event numbers mirror NetEvent in claude/src/net.h — change them together.
+
+    var RELAY = '__RELAY_URL__';   // stamped by web/build.sh ($RELAY_URL)
+    if (RELAY.indexOf('__') === 0) RELAY = '';   // unstamped: no public relay yet
+    var wantArena = false, welcomed = false, begun = false;
+    var net = { ws: null, myId: 0, hostId: 0, names: {}, colors: {}, scores: {},
+                last: {}, batch: null };
+
+    function relayUrl() {
+      if (localStorage.mpRelay) return localStorage.mpRelay;
+      var h = location.hostname;
+      if (h === 'localhost' || h === '127.0.0.1' || /^[0-9.]+$/.test(h) ||
+          /\.local$/.test(h)) {
+        return 'ws://' + h + ':8787';   // dev default, matches `dotnet run`
+      }
+      return RELAY;
+    }
+
+    function showNotice(text) {
+      var n = document.createElement('div');
+      n.textContent = text;
+      n.style.cssText = 'position:absolute;top:8px;left:50%;' +
+        'transform:translateX(-50%);background:#301010;color:#f0b0a0;' +
+        'padding:6px 14px;font-size:.8rem;z-index:5;border-radius:3px';
+      frame.appendChild(n);
+      setTimeout(function () { n.remove(); }, 6000);
+    }
+
+    // The one string crossing into the wasm side: write UTF-8 into the shared
+    // buffer, ring the right bell. Kill feed and standings are composed here —
+    // this side owns the names.
+    function sendStr(s, fn) {
+      if (!ready) return;
+      Module.stringToUTF8(String(s).slice(0, 60), Module._net_msg_buf(), 191);
+      var f = Module['_' + fn];
+      if (f) f();
+    }
+    function postMsg(s) { sendStr(String(s).toUpperCase(), 'net_post_message'); }
+
+    function scoreline() {
+      var ids = Object.keys(net.scores);
+      if (!ids.length) return;
+      ids.sort(function (a, b) { return net.scores[b] - net.scores[a]; });
+      sendStr(ids.slice(0, 4).map(function (id) {
+        return net.scores[id] + ' ' + (net.names[id] || '???');
+      }).join('   '), 'net_set_scoreline');
+    }
+
+    function onDied(victimId, killerId) {
+      var v = net.names[victimId] || 'IEMAND';
+      if (killerId > 0 && net.names[killerId]) {
+        net.scores[killerId] = (net.scores[killerId] || 0) + 1;
+        postMsg(net.names[killerId] + ' ☠ ' + v);
+      } else {
+        postMsg(v + ' IS DOOR DE WINKEL GEPAKT');
+      }
+      scoreline();
+    }
+
+    // Enter the arena once BOTH the welcome and the wasm runtime are in,
+    // whichever lands second. Roster joins that W() dropped mid-boot re-land
+    // here first (net_peer_join is idempotent on the other side).
+    function tryBegin() {
+      if (!wantArena || !welcomed || !ready || begun) return;
+      begun = true;
+      Object.keys(net.names).forEach(function (id) {
+        if (+id !== net.myId) W('net_peer_join', +id, net.colors[id] || 0);
+      });
+      W('net_begin_arena', net.myId, net.hostId);
+      scoreline();
+    }
+
+    function gameFrame(from, d) {
+      if (d.t === 's') {
+        net.last[from] = d;
+        W('net_player_state', from, d.x, d.y, d.yaw, d.h, d.w, d.f);
+      } else if (d.t === 'e') {
+        if (d.k === 3) onDied(from, d.a);   // Died: names + scores live here
+        W('net_event', d.k, from, d.a || 0, d.b || 0, d.c || 0, d.d || 0);
+      } else if (d.t === 'E' && d.l) {
+        for (var i = 0; i < d.l.length; i++) {
+          var en = d.l[i];
+          W('net_enemy_state',
+            en[0], en[1], en[2], en[3], en[4], en[5], en[6], en[7], en[8]);
+        }
+      }
+    }
+
+    function connect(room, name) {
+      var color = Math.floor(Math.random() * 8);
+      var url = relayUrl().replace(/\/$/, '') +
+                '/ws?room=' + encodeURIComponent(room) +
+                '&name=' + encodeURIComponent(name) + '&color=' + color;
+      var ws = new WebSocket(url);
+      net.ws = ws;
+
+      ws.onmessage = function (e) {
+        var m;
+        try { m = JSON.parse(e.data); } catch (err) { return; }
+        if (m.t === 'welcome') {
+          net.myId = m.id;
+          net.hostId = m.hostId;
+          m.roster.forEach(function (r) {
+            net.names[r.id] = r.name;
+            net.colors[r.id] = r.color;
+            if (!(r.id in net.scores)) net.scores[r.id] = 0;
+            if (r.id !== net.myId) W('net_peer_join', r.id, r.color);
+          });
+          welcomed = true;
+          tryBegin();
+        } else if (m.t === 'peer') {
+          net.names[m.id] = m.name;
+          net.colors[m.id] = m.color;
+          if (!(m.id in net.scores)) net.scores[m.id] = 0;
+          W('net_peer_join', m.id, m.color);
+          postMsg(m.name + ' KOMT DE WINKEL BINNEN');
+          scoreline();
+        } else if (m.t === 'left') {
+          postMsg((net.names[m.id] || 'IEMAND') + ' IS WEG');
+          delete net.names[m.id];
+          delete net.colors[m.id];
+          delete net.scores[m.id];
+          delete net.last[m.id];
+          W('net_peer_left', m.id);
+          net.hostId = m.hostId;
+          W('net_set_host', m.hostId);
+          scoreline();
+        } else if (m.t === 'g' && m.d) {
+          gameFrame(m.from, m.d);
+        }
+      };
+
+      ws.onclose = function () {
+        if (!begun) {
+          showNotice('relay onbereikbaar — draait server/ wel?');
+          wantArena = false;
+          return;
+        }
+        // Mid-match drop: the shop empties out locally and plays on alone.
+        postMsg('VERBINDING MET DE WINKEL VERBROKEN');
+        Object.keys(net.names).forEach(function (id) {
+          if (+id !== net.myId) W('net_peer_left', +id);
+        });
+      };
+    }
+
+    function r2(v) { return Math.round(v * 100) / 100; }
+    function wsSend(d, to) {
+      if (!net.ws || net.ws.readyState !== 1) return;
+      var env = { t: 'g', d: d };
+      if (to) env.to = to;
+      net.ws.send(JSON.stringify(env));
+    }
+
+    window.__net = {
+      state: function (x, y, yaw, h, w, f) {
+        wsSend({ t: 's', x: r2(x), y: r2(y),
+                 yaw: Math.round(yaw * 1000) / 1000, h: h, w: w, f: f });
+      },
+      event: function (to, k, a, b, c, d) {
+        if (k === 3) onDied(net.myId, a);   // the relay never echoes my own death
+        wsSend({ t: 'e', k: k, a: a, b: b, c: c, d: d }, to);
+      },
+      enemyBegin: function () { net.batch = []; },
+      enemy: function (idx, kind, x, y, h, st, ax, ay, fl) {
+        net.batch.push([idx, kind, r2(x), r2(y), h, st, r2(ax), r2(ay), fl]);
+      },
+      enemyFlush: function () {
+        if (net.batch && net.batch.length) wsSend({ t: 'E', l: net.batch });
+        net.batch = null;
+      },
+      leave: function () {   // Esc in the arena: hang up, back to the title
+        begun = false; welcomed = false; wantArena = false;
+        if (net.ws) { net.ws.onclose = null; net.ws.close(); net.ws = null; }
+        net.names = {}; net.colors = {}; net.scores = {}; net.last = {};
+        showNotice('kamer verlaten — herlaad de pagina om opnieuw te joinen');
+      }
+    };
+
+    // Headless test seam, like __mob below.
+    window.__netdbg = {
+      state: function () {
+        return { myId: net.myId, hostId: net.hostId, begun: begun,
+                 connected: !!(net.ws && net.ws.readyState === 1),
+                 names: JSON.parse(JSON.stringify(net.names)),
+                 scores: JSON.parse(JSON.stringify(net.scores)),
+                 last: JSON.parse(JSON.stringify(net.last)) };
+      }
+    };
 
     if (!isTouch) return;   // desktop: nothing below runs, no DOM changes
 
@@ -89,13 +349,6 @@
     var lastStick = { x: 0, y: 0 };
     var paused = false;      // portrait: rotate overlay up, wasm told to freeze
     var yawSent = 0;         // cumulative drag-aim rad, for the test seam
-
-    var startEl = document.getElementById('start');
-    startEl.style.flexDirection = 'column';
-    startEl.innerHTML = '<div>&#9654; tap to start</div>' +
-      '<div style="font-size:.85rem;color:#888;margin-top:8px">' +
-      'left thumb moves &middot; right thumb aims<br>' +
-      'tap fires &middot; swipe switches weapon</div>';
 
     var css = document.createElement('style');
     css.textContent =
