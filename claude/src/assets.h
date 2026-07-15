@@ -9,6 +9,7 @@ struct Assets {
     Texture2D floorTex;
     Texture2D ceilingTex;
     Texture2D enemy[5];               // indexed by EnemyKind
+    Texture2D playerKlant;            // the other players, tinted per member
     Texture2D pickup[9];              // indexed by PickupKind
     Texture2D weapon[4];              // indexed by WeaponId
     Texture2D soupCan;

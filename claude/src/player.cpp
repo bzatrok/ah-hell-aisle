@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "audio.h"
+#include "net.h"
 #include "raymath.h"
 #include "web_input.h"
 #include "world.h"
@@ -113,6 +114,33 @@ static void UpdateDoors(World& w, float dt) {
 
 // --- shooting ----------------------------------------------------------------
 
+// What a swing or a ray connected with: staff, or another shopper. At most one.
+struct ScanHit {
+    Enemy* enemy = nullptr;
+    RemotePlayer* peer = nullptr;
+};
+
+// Routes a landed hit by ownership: solo enemies take it directly, arena enemies
+// go through the host's sim, other shoppers are told they were hit and apply it
+// to themselves. The hurtFlash on the billboard is immediate local feedback —
+// the wire only carries the consequences.
+static bool ApplyHit(World& w, const ScanHit& hit, int damage) {
+    if (hit.enemy) {
+        if (w.mode == Mode::Arena) {
+            NetDamageEnemy(w, (int)(hit.enemy - w.enemies.data()), damage);
+        } else {
+            EnemyHurt(w, *hit.enemy, damage);
+        }
+        return true;
+    }
+    if (hit.peer) {
+        NetSendHitPlayer(hit.peer->id, damage);
+        hit.peer->hurtFlash = 1.0f;
+        return true;
+    }
+    return false;
+}
+
 static void SwingStokbrood(World& w) {
     const Player& p = w.player;
     const Vector2 fwd = p.forward();
@@ -129,23 +157,40 @@ static void SwingStokbrood(World& w) {
         }
         if (!w.map.LineOfSight(p.pos, e.pos)) continue;
 
-        EnemyHurt(w, e, kMeleeDamage);
-        connected = true;
+        connected |= ApplyHit(w, {&e, nullptr}, kMeleeDamage);
     }
 
+    if (w.mode == Mode::Arena) {
+        for (RemotePlayer& rp : gNet.peers) {
+            if (!rp.alive) continue;
+            const Vector2 to = Vector2Subtract(rp.pos, p.pos);
+            const float dist = Vector2Length(to);
+            if (dist > kMeleeRange + kPlayerRadius) continue;
+            if (dist > 0.01f) {
+                const float cosAngle =
+                    Vector2DotProduct(Vector2Scale(to, 1.0f / dist), fwd);
+                if (cosAngle < cosf(kMeleeArc)) continue;
+            }
+            if (!w.map.LineOfSight(p.pos, rp.pos)) continue;
+
+            connected |= ApplyHit(w, {nullptr, &rp}, kMeleeDamage);
+        }
+    }
+
+    NetSendFired((int)WeaponId::Stokbrood);
     PlaySfx(Sfx::Swing);
     if (connected) PlaySfx(Sfx::Hit, 0.9f);
     AlertEnemies(w, p.pos, kMeleeNoiseRange);
 }
 
-// One hitscan ray from the player at `angle`. Stops at the first thing it meets,
-// shelf or shopper; returns the shopper if that came first.
-static Enemy* HitscanRay(World& w, float angle) {
+// One hitscan ray from the player at `angle`. Stops at the first thing it meets —
+// shelf, staff or shopper; returns whichever body came first.
+static ScanHit HitscanRay(World& w, float angle) {
     const Player& p = w.player;
     const Vector2 dir = {cosf(angle), sinf(angle)};
 
     float nearest = w.map.RayToWall(p.pos, dir, kGunRange);
-    Enemy* hit = nullptr;
+    ScanHit hit;
 
     for (Enemy& e : w.enemies) {
         if (!e.alive()) continue;
@@ -160,9 +205,29 @@ static Enemy* HitscanRay(World& w, float angle) {
         const float entry = fmaxf(0.0f, along - sqrtf(radius * radius - perp2));
         if (entry < nearest) {
             nearest = entry;
-            hit = &e;
+            hit = {&e, nullptr};
         }
     }
+
+    if (w.mode == Mode::Arena) {
+        for (RemotePlayer& rp : gNet.peers) {
+            if (!rp.alive) continue;
+            const Vector2 toPeer = Vector2Subtract(rp.pos, p.pos);
+            const float along = Vector2DotProduct(toPeer, dir);
+            if (along < 0.0f) continue;
+
+            const float radius = kPlayerRadius + 0.1f;
+            const float perp2 = Vector2DotProduct(toPeer, toPeer) - along * along;
+            if (perp2 > radius * radius) continue;
+
+            const float entry = fmaxf(0.0f, along - sqrtf(radius * radius - perp2));
+            if (entry < nearest) {
+                nearest = entry;
+                hit = {nullptr, &rp};
+            }
+        }
+    }
+
     return hit;
 }
 
@@ -172,15 +237,13 @@ static float SpreadAngle(float base, float spread) {
 
 static void FirePrijspistool(World& w) {
     Player& p = w.player;
-    Enemy* hit = HitscanRay(w, SpreadAngle(p.yaw, kGunSpread));
+    const ScanHit hit = HitscanRay(w, SpreadAngle(p.yaw, kGunSpread));
 
     p.ammo--;
     p.muzzleFlash = 1.0f;
+    NetSendFired((int)WeaponId::Prijspistool);
     PlaySfx(Sfx::Shot);
-    if (hit) {
-        EnemyHurt(w, *hit, kGunDamage);
-        PlaySfx(Sfx::Hit, 0.9f);
-    }
+    if (ApplyHit(w, hit, kGunDamage)) PlaySfx(Sfx::Hit, 0.9f);
     AlertEnemies(w, p.pos, kGunNoiseRange);
 }
 
@@ -188,14 +251,13 @@ static void FireStatiegeldkanon(World& w) {
     Player& p = w.player;
     bool connected = false;
     for (int i = 0; i < kScatterPellets; i++) {
-        if (Enemy* hit = HitscanRay(w, SpreadAngle(p.yaw, kScatterSpread))) {
-            EnemyHurt(w, *hit, kScatterDamage);
-            connected = true;
-        }
+        connected |= ApplyHit(w, HitscanRay(w, SpreadAngle(p.yaw, kScatterSpread)),
+                              kScatterDamage);
     }
 
     p.flessen--;
     p.muzzleFlash = 1.0f;
+    NetSendFired((int)WeaponId::Statiegeldkanon);
     PlaySfx(Sfx::Scattergun);
     if (connected) PlaySfx(Sfx::Hit, 0.9f);
     AlertEnemies(w, p.pos, kGunNoiseRange);
@@ -220,6 +282,8 @@ static void FireVuurwerkpijl(World& w) {
 
     p.vuurwerk--;
     p.muzzleFlash = 0.7f;
+    NetSendFired((int)WeaponId::Vuurwerkpijl);
+    NetSendRocket(r.pos, r.vel);   // peers fly the replica; its damage stays mine
     PlaySfx(Sfx::RocketLaunch);
     AlertEnemies(w, p.pos, kGunNoiseRange);
 }
@@ -311,6 +375,18 @@ static bool WalkableForPlayer(const World& w, Vector2 from, Vector2 to) {
         const float after = Vector2Distance(to, e.pos);
         if (after >= minDist) continue;
         if (after < Vector2Distance(from, e.pos)) return false;
+    }
+
+    if (w.mode == Mode::Arena) {
+        // Other shoppers are solid the same way — no standing inside each other,
+        // but a lag-spike overlap always lets you walk back out.
+        for (const RemotePlayer& rp : gNet.peers) {
+            if (!rp.alive) continue;
+            const float minDist = kPlayerRadius * 2.0f;
+            const float after = Vector2Distance(to, rp.pos);
+            if (after >= minDist) continue;
+            if (after < Vector2Distance(from, rp.pos)) return false;
+        }
     }
     return true;
 }

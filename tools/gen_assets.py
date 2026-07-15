@@ -893,6 +893,71 @@ def boss_sheet(fn):
 
 
 # --------------------------------------------------------------------------
+# Multiplayer set (handover 010). Same appendix rule as the 007 block: only
+# ever ADD here and call it at the very END of main(), so every earlier asset
+# keeps drawing from the same random stream.
+# --------------------------------------------------------------------------
+
+def player_klant_frame(kind, t=0):
+    """A rival shopper — the other players in the arena. Alive, unlike the
+    staff. Drawn in near-whites on purpose: the renderer multiplies each
+    player's palette colour over the sprite, so the outfit is the canvas."""
+    img = new(ENEMY, ENEMY)
+    d = ImageDraw.Draw(img)
+    if kind == "die":
+        drop = [6, 18, 28][t]
+        # folding up over the basket
+        d.rectangle([16, 30 + drop, 48, 58], fill=WHITE + (255,))
+        d.ellipse([20 + t * 4, 24 + drop, 36 + t * 4, 40 + drop],
+                  fill=FLESH + (255,))
+        if t >= 1:
+            d.rectangle([10, 52, 54, 58], fill=OFFWHITE + (255,))
+        if t == 2:
+            d.rectangle([6, 54, 16, 61], fill=(70, 74, 82, 255))   # dropped basket
+            for _ in range(20):
+                d.point((random.randint(8, 56), random.randint(52, 62)),
+                        fill=BLOOD + (255,))
+        return img
+
+    sway = 0 if kind != "walk" else (-1 if t == 0 else 1)
+    aiming = kind == "attack"
+
+    # legs — pale jeans
+    d.rectangle([24 - sway, 46, 30 - sway, 62], fill=(196, 200, 208, 255))
+    d.rectangle([34 + sway, 46, 40 + sway, 62], fill=(196, 200, 208, 255))
+
+    # the hoodie: the tint's canvas
+    d.rectangle([20, 26, 44, 48], fill=WHITE + (255,))
+    d.rectangle([20, 26, 44, 30], fill=OFFWHITE + (255,))   # hood bunched at the neck
+    d.rectangle([31, 31, 33, 48], fill=OFFWHITE + (255,))   # zip
+
+    # head — a living face and a beanie that takes the tint too
+    d.ellipse([24, 8, 40, 26], fill=FLESH + (255,))
+    d.rectangle([23, 7, 41, 13], fill=WHITE + (255,))
+    d.rectangle([27, 16, 30, 19], fill=NEARBLACK + (255,))
+    d.rectangle([34, 16, 37, 19], fill=NEARBLACK + (255,))
+    d.rectangle([29, 22, 35, 23], fill=(150, 90, 80, 255))
+
+    if aiming:
+        # prijspistool arm out at you; the basket hand never lets go
+        d.rectangle([28, 30, 54, 34], fill=FLESH + (255,))
+        d.rectangle([50, 26, 60, 34], fill=YELLOW + (255,))
+        d.rectangle([57, 29, 60, 31], fill=RED + (255,))
+        d.rectangle([14, 28, 20, 44], fill=WHITE + (255,))       # off arm, sleeve
+    else:
+        d.rectangle([14 + sway, 28, 20 + sway, 46], fill=WHITE + (255,))
+        d.rectangle([44 - sway, 28, 50 - sway, 46], fill=WHITE + (255,))
+
+    # the shopping basket, always: they're here to loot the place too
+    d.rectangle([8 + sway, 42, 22 + sway, 52], fill=(70, 74, 82, 255))
+    d.line([(9 + sway, 44), (21 + sway, 44)], fill=(110, 114, 122, 255))
+    d.line([(9 + sway, 47), (21 + sway, 47)], fill=(110, 114, 122, 255))
+    d.line([(12 + sway, 42), (14 + sway, 38)], fill=(70, 74, 82, 255), width=2)
+
+    return img
+
+
+# --------------------------------------------------------------------------
 # HUD
 # --------------------------------------------------------------------------
 
@@ -1015,6 +1080,10 @@ def main():
     save(pickup_statiegeldkanon(), "pickup_statiegeldkanon.png")
     save(pickup_vuurwerkpijl(), "pickup_vuurwerkpijl.png")
     save(proj_vuurwerkpijl(), "proj_vuurwerkpijl.png")
+
+    # Handover 010 appendix — multiplayer. Stays last, same stream rule.
+    print("multiplayer")
+    save(enemy_sheet(player_klant_frame), "player_klant.png")
     print("\ndone.")
 
 

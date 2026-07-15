@@ -62,6 +62,8 @@ struct Projectile {
     enum class Kind : unsigned char { SoupCan, Rocket };
     Kind kind = Kind::SoupCan;
     bool ownerIsPlayer = false;
+    bool remote = false;   // a peer's shot, replicated for the visuals: the
+                           // shooter owns its damage, so the blast is mute here
     Vector2 pos{};
     Vector2 vel{};
     float height = 0.0f;   // world Y, for the arc

@@ -1,0 +1,7 @@
+bin/
+obj/
+*.md
+docker-compose*.yml
+deploy.sh
+.dockerignore
+Dockerfile

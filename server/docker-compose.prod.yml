@@ -1,0 +1,29 @@
+# Production: relay behind Caddy for wss:// auto-TLS. NOT DEPLOYED YET — this is
+# the prepared shape for the hosting round (a Hetzner VM, per repo convention).
+# Bring-up on the box:
+#   1. Put the relay's public hostname in .env:  RELAY_DOMAIN=mp.example.com
+#   2. Point the domain's A record at the VM.
+#   3. docker compose -f docker-compose.prod.yml up -d
+# Then stamp the same wss://$RELAY_DOMAIN into the web build (see web/index.html's
+# RELAY constant) and redeploy the page.
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"      # ACME http-01 + redirect
+      - "443:443"
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+    command: caddy reverse-proxy --from "https://${RELAY_DOMAIN}" --to "relay:8080"
+    volumes:
+      - caddy-data:/data   # keeps the Let's Encrypt cert across restarts
+
+volumes:
+  caddy-data:

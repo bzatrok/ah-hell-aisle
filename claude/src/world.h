@@ -13,13 +13,20 @@ struct HudMessage {
     float life = 0.0f;
 };
 
+// Solo is the three-level run; Arena is the multiplayer floor — no keycard, no
+// exit door, deaths respawn instead of ending anything.
+enum class Mode : unsigned char { Solo, Arena };
+
 // The run: three levels crossed in sequence, one World for all of them.
 struct World {
+    Mode mode = Mode::Solo;
     Map map;
     Player player;
     std::vector<Enemy> enemies;
     std::vector<Pickup> pickups;
     std::vector<Projectile> projectiles;
+    std::vector<Vector2> arenaSpawns;        // the arena's '@' set: respawn candidates
+    std::vector<Vector2> arenaEnemySpawns;   // the '1' set: where trolleys restock
 
     int level = 0;             // index into the run, 0-based
     int kills = 0;             // all three accumulate across levels: the
@@ -43,3 +50,6 @@ void WorldStartRun(World& w);       // level 1, factory loadout
 void WorldNextLevel(World& w);      // carry the loadout through the dock door
 void WorldRestartLevel(World& w);   // R: this level again, entry loadout
 void WorldUpdate(World& w, float dt);
+
+void WorldStartArena(World& w);     // the multiplayer floor, factory loadout
+void WorldArenaRespawn(World& w);   // fresh body at the least-crowded '@'
