@@ -11,6 +11,7 @@ active development. The arena freeze on `claude/` is lifted.
 |---|---|
 | `claude/` | **The game.** The winning implementation, open for development. |
 | `web/` | WASM harness + Cloudflare Pages deploy. `./web/build.sh` → `web/dist/`. |
+| `server/` | Multiplayer room relay: .NET WebSocket router, Dockerized. Local-only until its hosting round. |
 | `assets/` | The art. Generated deterministically by `tools/gen_assets.py` — keep it regenerable. |
 | `runner-ups/` | The other bake-off implementations, archived. |
 | `SPEC.md` `HANDOVER.md` `JUDGING.md` | The original competition contract, kept for the record. |
@@ -40,3 +41,15 @@ Web (from the repo root):
 brew install emscripten
 ./web/build.sh   # → web/dist/, deployable to Cloudflare Pages project ah-hell-aisle
 ```
+
+Multiplayer, locally (arena mode is web-only; design record in
+`.handovers/handover_010_multiplayer-arena.md`):
+
+```sh
+cd server && dotnet run          # or: docker compose up  — relay on :8787
+python3 -m http.server 8080 -d web/dist
+# two browser tabs → http://localhost:8080 → ARENA, same kamercode
+```
+
+The public site has no relay yet: `RELAY_URL=wss://…` at build time wires one in
+(`web/build.sh`), which is the deferred hosting round.

@@ -18,6 +18,7 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 | 008 | [mobile-touch-controls](handover_008_mobile-touch-controls.md) | fresh session | Mobile web controls: tap fire/use, swipe weapons, tilt aim, virtual stick | ✅ done | `claude/src` + `web/` | 2026-07-14 | 2026-07-15 |
 | 007 | [game-expansion](handover_007_game-expansion.md) | fresh session | Kassa fix, web Esc, +2 weapons, +2 enemies, 3 levels, SFX + music | ✅ done | `claude/` | 2026-07-14 | 2026-07-14 |
 | 009 | [korona-parliament-fork](handover_009_korona-parliament-fork.md) | fresh session | Fork: Hungarian Parliament re-theme, regalia weapons, fictional cast | ⬜ pending | branch `korona`: `claude/` + `assets/` + `tools/` | 2026-07-14 | — |
+| 010 | [multiplayer-arena](handover_010_multiplayer-arena.md) | same session (design record) | PvPvE deathmatch arena: relay server, netcode, Nachtdienst map | ✅ done | `server/` + `claude/src` + `web/` on `feature/multiplayer-arena` | 2026-07-15 | 2026-07-15 |
 
 > **Arena result (2026-07-14):** `claude/` won and is unlocked for further development.
 > The other implementations were archived under `runner-ups/`.
@@ -69,6 +70,16 @@ Status legend: ⬜ pending · 🔄 in-progress · ✅ done · ❌ failed to buil
 > against the bundle built from that exact commit (BUILD `2fac689`, 0 page errors).
 > Production web deploy is a separate Ben-gated step; until it runs, production stays
 > on the 007 build and the newest controls live at mobile-preview.ah-hell-aisle.pages.dev.
+> (Production deployed later the same day: `2fac689` live at ah-hell-aisle.pages.dev.)
+
+> **010 note (2026-07-15):** built and verified in-session on `feature/multiplayer-arena`
+> (unmerged), ten commits: .NET room relay (`server/`, Docker), web_input-style net
+> bridge, the Nachtdienst arena, tintable klant sprite, shooter-authoritative PvP +
+> host-streamed monsters, join UI + JSON protocol, arena HUD. Two-headless-browser
+> suite green end to end (roster, movement, shared trolleys at zero drift, credited
+> frag both sides, respawn, host handoff); solo + mobile regressions green.
+> **Remaining:** Ben's local two-tab pass, merge call, and the separate hosting round
+> (Hetzner + wss) before the arena reaches the public site.
 
 ## Launch lines
 
