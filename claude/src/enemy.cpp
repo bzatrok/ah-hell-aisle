@@ -5,6 +5,7 @@
 
 #include "audio.h"
 #include "config.h"
+#include "net.h"
 #include "raymath.h"
 #include "world.h"
 
@@ -520,30 +521,55 @@ void EnemiesUpdate(World& w, float dt) {
 }
 
 // The vuurwerkpijl's blast: linear falloff over the radius, and it does not care
-// who is standing in it — enemies and the shooter alike. Walls shield.
-static void ExplodeRocket(World& w, Vector2 at) {
+// who is standing in it — enemies, other shoppers and the shooter alike. Walls
+// shield. A replica (a peer's rocket) brings only the light and the noise: its
+// damage is the shooter's to deal, over the wire.
+static void ExplodeRocket(World& w, const Projectile& rocket) {
+    const Vector2 at = rocket.pos;
+    const float pd = Vector2Distance(w.player.pos, at);
+
+    w.shake = fminf(1.2f, w.shake + 0.6f);
+    w.player.muzzleFlash = fmaxf(w.player.muzzleFlash, 0.9f);   // the aisle lights up
+    PlaySfxAt(Sfx::Explosion, pd);
+
+    if (rocket.remote) return;
+
     for (Enemy& e : w.enemies) {
         if (!e.alive()) continue;
         const float d = Vector2Distance(e.pos, at);
         if (d > kRocketRadius || !w.map.LineOfSight(at, e.pos)) continue;
-        EnemyHurt(w, e, (int)Lerp((float)kRocketDamageMax, (float)kRocketDamageMin,
-                                  d / kRocketRadius));
+        const int dmg = (int)Lerp((float)kRocketDamageMax, (float)kRocketDamageMin,
+                                  d / kRocketRadius);
+        if (w.mode == Mode::Arena) {
+            NetDamageEnemy(w, (int)(&e - w.enemies.data()), dmg);
+        } else {
+            EnemyHurt(w, e, dmg);
+        }
     }
-    const float pd = Vector2Distance(w.player.pos, at);
+
+    if (w.mode == Mode::Arena) {
+        for (RemotePlayer& rp : gNet.peers) {
+            if (!rp.alive) continue;
+            const float d = Vector2Distance(rp.pos, at);
+            if (d > kRocketRadius || !w.map.LineOfSight(at, rp.pos)) continue;
+            NetSendHitPlayer(rp.id, (int)Lerp((float)kRocketDamageMax,
+                                              (float)kRocketDamageMin,
+                                              d / kRocketRadius));
+            rp.hurtFlash = 1.0f;
+        }
+    }
+
     if (pd <= kRocketRadius && w.map.LineOfSight(at, w.player.pos)) {
         PlayerDamage(w, (int)Lerp((float)kRocketDamageMax, (float)kRocketDamageMin,
                                   pd / kRocketRadius));
     }
-    w.shake = fminf(1.2f, w.shake + 0.6f);
-    w.player.muzzleFlash = fmaxf(w.player.muzzleFlash, 0.9f);   // the aisle lights up
-    PlaySfxAt(Sfx::Explosion, pd);
 }
 
 static bool RocketUpdate(World& w, Projectile& p, float dt) {
-    // Flat flight. Detonates on the first wall, the first shopper, or timeout.
+    // Flat flight. Detonates on the first wall, the first body, or timeout.
     const Vector2 next = Vector2Add(p.pos, Vector2Scale(p.vel, dt));
     if (w.map.SolidAt(next) || p.life <= 0.0f) {
-        ExplodeRocket(w, p.pos);
+        ExplodeRocket(w, p);
         return false;
     }
     p.pos = next;
@@ -551,8 +577,18 @@ static bool RocketUpdate(World& w, Projectile& p, float dt) {
     for (const Enemy& e : w.enemies) {
         if (!e.alive()) continue;
         if (Vector2Distance(p.pos, e.pos) < StatsFor(e.kind).radius + 0.2f) {
-            ExplodeRocket(w, p.pos);
+            ExplodeRocket(w, p);
             return false;
+        }
+    }
+
+    if (w.mode == Mode::Arena) {
+        for (const RemotePlayer& rp : gNet.peers) {
+            if (!rp.alive) continue;
+            if (Vector2Distance(p.pos, rp.pos) < kPlayerRadius + 0.2f) {
+                ExplodeRocket(w, p);
+                return false;
+            }
         }
     }
     return true;
