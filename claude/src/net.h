@@ -35,6 +35,9 @@ struct RemotePlayer {
     float fireAnim = 0.0f;   // drives the attack frame, set by Fired events
     float hurtFlash = 0.0f;
     float corpseTimer = -1.0f;  // >=0: dead, counts up through the dying frames
+
+    bool moving = false;     // the current segment covers real ground
+    float animTimer = 0.0f;  // walk cycle, ticked locally while moving
 };
 
 // Event types crossing the JS bridge, both directions. The JS protocol layer in

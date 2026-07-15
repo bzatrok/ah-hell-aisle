@@ -54,6 +54,8 @@ void AssetsLoad() {
     gAssets.enemy[(int)EnemyKind::Beveiliger] = Grab("enemy_beveiliger.png");
     gAssets.enemy[(int)EnemyKind::Bedrijfsleider] = Grab("enemy_bedrijfsleider.png");
 
+    gAssets.playerKlant = Grab("player_klant.png");
+
     gAssets.pickup[(int)PickupKind::Appelflap] = Grab("pickup_appelflap.png");
     gAssets.pickup[(int)PickupKind::Rookworst] = Grab("pickup_rookworst.png");
     gAssets.pickup[(int)PickupKind::Labels] = Grab("pickup_labels.png");
@@ -80,6 +82,7 @@ void AssetsUnload() {
     UnloadTexture(gAssets.floorTex);
     UnloadTexture(gAssets.ceilingTex);
     for (Texture2D& t : gAssets.enemy) UnloadTexture(t);
+    UnloadTexture(gAssets.playerKlant);
     for (Texture2D& t : gAssets.pickup) UnloadTexture(t);
     for (Texture2D& t : gAssets.weapon) UnloadTexture(t);
     UnloadTexture(gAssets.soupCan);

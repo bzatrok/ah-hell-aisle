@@ -36,6 +36,17 @@ void TickPeers(float dt) {
             p.pos = Vector2Lerp(p.fromPos, p.toPos, p.lerpT);
             p.yaw = p.fromYaw + WrapAngle(p.toYaw - p.fromYaw) * p.lerpT;
         }
+
+        // Walk frames come from covered ground, not received flags: a segment
+        // longer than ~2 cm means their feet are doing something.
+        p.moving = p.lerpT < 1.0f &&
+                   Vector2DistanceSqr(p.fromPos, p.toPos) > 0.0004f;
+        if (p.moving) {
+            p.animTimer += dt;
+            if (p.animTimer >= 0.44f) p.animTimer = 0.0f;
+        } else {
+            p.animTimer = 0.0f;
+        }
     }
 }
 

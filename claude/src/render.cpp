@@ -7,6 +7,7 @@
 
 #include "assets.h"
 #include "config.h"
+#include "net.h"
 #include "raymath.h"
 #include "world.h"
 
@@ -307,8 +308,52 @@ Color FlashWhite(Color base, float amount) {
 // on the bottom row of every frame, corpses included, so the floor position is the
 // position, and a corpse lies on the floor for free.
 constexpr float kCanSize = 0.26f;
+constexpr float kPeerSize = 1.35f;   // same stature as the vakkenvuller
+
+// Multiply-tints for the klant sprite's near-white outfit: light enough that the
+// face stays a face, saturated enough to name a player by their colour.
+constexpr Color kPeerPalette[8] = {
+    {255, 120, 110, 255},   // rood
+    {120, 170, 255, 255},   // blauw
+    {130, 235, 130, 255},   // groen
+    {250, 230, 110, 255},   // geel
+    {205, 140, 255, 255},   // paars
+    {255, 180, 100, 255},   // oranje
+    {120, 235, 235, 255},   // cyaan
+    {255, 150, 215, 255},   // roze
+};
+
+Color Mul(Color a, Color b) {
+    return Color{(unsigned char)(a.r * b.r / 255), (unsigned char)(a.g * b.g / 255),
+                 (unsigned char)(a.b * b.b / 255), 255};
+}
+
+// The klant sheet shares the enemy frame layout: walk-walk-attack-die-die-die.
+int PeerFrame(const RemotePlayer& p) {
+    if (p.corpseTimer >= 0.0f) {
+        if (p.corpseTimer < 0.14f) return 3;
+        if (p.corpseTimer < 0.28f) return 4;
+        return 5;
+    }
+    if (p.fireAnim > 0.0f) return 2;
+    if (p.moving) return (p.animTimer < 0.22f) ? 0 : 1;
+    return 0;
+}
 
 void CollectSprites(const World& w, Vector3 eye, std::vector<Billboard>& out) {
+    if (w.mode == Mode::Arena) {
+        for (const RemotePlayer& rp : gNet.peers) {
+            const Vector3 at = {rp.pos.x, 0.0f, rp.pos.y};
+            const Color lit = Mul(LightFor(w, at, eye), kPeerPalette[rp.colorIdx & 7]);
+            out.push_back({gAssets.playerKlant,
+                           {PeerFrame(rp) * 64.0f, 0.0f, 64.0f, 64.0f},
+                           at,
+                           {kPeerSize, kPeerSize},
+                           FlashWhite(lit, rp.hurtFlash),
+                           Vector3DistanceSqr(at, eye)});
+        }
+    }
+
     for (const Enemy& e : w.enemies) {
         const float size = StatsFor(e.kind).spriteSize;
         // Sheets are 64px cells; the boss was drawn at 96 so he can carry detail.
@@ -531,7 +576,8 @@ void RenderScene(const World& w, float dt) {
     // Back to front. The cutout shader means the depth buffer would sort them anyway,
     // but drawing far-to-near keeps the soft edges of the art honest.
     std::vector<Billboard> sprites;
-    sprites.reserve(w.enemies.size() + w.pickups.size() + w.projectiles.size());
+    sprites.reserve(w.enemies.size() + w.pickups.size() + w.projectiles.size() +
+                    gNet.peers.size());
     CollectSprites(w, cam.position, sprites);
     std::sort(sprites.begin(), sprites.end(),
               [](const Billboard& a, const Billboard& b) { return a.distSq > b.distSq; });
