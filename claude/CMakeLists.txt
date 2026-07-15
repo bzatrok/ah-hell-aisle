@@ -37,7 +37,9 @@ add_executable(ah_hell_aisle
     src/hud.cpp
     src/assets.cpp
     src/audio.cpp
-    src/web_input.cpp)
+    src/web_input.cpp
+    src/net.cpp
+    src/web_net.cpp)
 
 target_link_libraries(ah_hell_aisle PRIVATE raylib)
 target_compile_options(ah_hell_aisle PRIVATE -Wall -Wextra)
